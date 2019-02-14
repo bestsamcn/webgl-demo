@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+<title>demo10-矩阵</title>
+<meta name="description" content="">
+<meta name="keywords" content="">
+<script src="http://webglfundamentals.org/webgl/resources/webgl-utils.js"></script>
+<link href="" rel="stylesheet">
+</head>
+<body>
+	<input type="range" id="xrange" value="0" step="1" max="100">
+	<input type="range" id="yrange" value="0" step="1" max="100">
+	<input type="range" id="rotation" value="0" step="1" max="100">
+	<input type="range" id="scale" value="100" step="1" max="100">
+    <div>
+    	<canvas id="canvas" width="400" height="400"></canvas>
+    </div>
+</body>
+</html>
+<script id="2d-vertex-shader" type="x-shader/x-vertex">
+
+	//不能在程序内修改
+	attribute vec2 a_position;
+
+	//变换矩阵
+	uniform mat3 u_matrix;
+	void main(){
+		gl_Position = vec4( (u_matrix * vec3(a_position, 1)).xy, 0, 1);
+	}
+</script>
+<script id="2d-fragment-shader" type="x-shader/x-fragment">
+
+	//在Vertex Shader中，如果没有默认的精度，则float和int精度都为highp；在Fragment Shader中，float没有默认的精度，所以必须在Fragment Shader中为float指定一个默认精度或为每个float变量指定精度。
+	precision mediump float;
+
+	//指定颜色
+	uniform vec4 u_color;
+	void main(){
+		gl_FragColor = u_color;
+	}
+</script>
+
+<script>
+
+	var canvas = document.querySelector("canvas");
+	var gl = canvas.getContext("webgl");
+	gl.viewport(0, 0, canvas.width, canvas.height);
+
+	var program = webglUtils.createProgramFromScripts(gl, ['2d-vertex-shader', '2d-fragment-shader']);
+	gl.useProgram(program);
+
+	var trans = [0, 0];
+	var rotate = 0;
+	var scale = 1;
+
+	//获取指定变量
+	var uMatrix = gl.getUniformLocation(program, "u_matrix");
+
+	//着色器颜色
+	var uColor = gl.getUniformLocation(program, "u_color");
+
+	//初始化
+	function intMat(){
+		return [
+			1, 0, 0,
+			0, 1, 0, 
+			0, 0, 1
+		]
+	}
+
+	//3x3 矩阵相乘
+	function multiply(a, b) {
+	  let a00 = a[0], a01 = a[1], a02 = a[2];
+	  let a10 = a[3], a11 = a[4], a12 = a[5];
+	  let a20 = a[6], a21 = a[7], a22 = a[8];
+	  let b00 = b[0], b01 = b[1], b02 = b[2];
+	  let b10 = b[3], b11 = b[4], b12 = b[5];
+	  let b20 = b[6], b21 = b[7], b22 = b[8];
+	  var out = [];
+	  out[0] = b00 * a00 + b01 * a10 + b02 * a20;
+	  out[1] = b00 * a01 + b01 * a11 + b02 * a21;
+	  out[2] = b00 * a02 + b01 * a12 + b02 * a22;
+	  out[3] = b10 * a00 + b11 * a10 + b12 * a20;
+	  out[4] = b10 * a01 + b11 * a11 + b12 * a21;
+	  out[5] = b10 * a02 + b11 * a12 + b12 * a22;
+	  out[6] = b20 * a00 + b21 * a10 + b22 * a20;
+	  out[7] = b20 * a01 + b21 * a11 + b22 * a21;
+	  out[8] = b20 * a02 + b21 * a12 + b22 * a22;
+	  return out;
+	}
+
+	//平移
+	function mkTranslate(tx, ty){
+		return [
+			1, 0, 0,
+			0, 1, 0,
+			tx, ty, 1
+		]
+	}
+
+	//旋转
+	function mkRotation(degree){
+		var rx = Math.sin(degree * Math.PI / 180 );
+		var ry = Math.cos(degree * Math.PI / 180 );
+		return [
+			ry, -rx, 0,
+			rx, ry, 0,
+			0, 0, 1
+		]
+	}
+
+	//缩放
+	function mkScale(s){
+		return [
+			s, 0, 0,
+			0, s, 0, 
+			0, 0, 1
+		]
+	}
+
+	//投影矩阵
+	function mkProjection(width, height){
+		return [
+			2 /width, 0, 0, 
+			0, -2 /height, 0,
+			-1, 1, 1
+		]
+	}
+
+	
+
+	//获取指定变量索引0
+	var attrLation = gl.getAttribLocation(program, 'a_position');
+	var buffer = gl.createBuffer();
+	gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+	
+	gl.enableVertexAttribArray(attrLation);
+	gl.vertexAttribPointer(attrLation, 2, gl.FLOAT, false, 0, 0);
+	
+	
+
+	document.querySelector('#xrange').onchange = e=>{
+		trans[0] = Number(e.target.value);
+		drawScene();
+	}
+	document.querySelector('#yrange').onchange = e=>{
+		trans[1] = Number(e.target.value);
+		drawScene();
+	}
+
+	document.querySelector('#rotation').onchange = e=>{
+		var r = Number(e.target.value);
+		rotate = r;
+		drawScene();
+	}
+
+	document.querySelector('#scale').onchange = e=>{
+		var s = Number(e.target.value);
+		scale = s /100;
+		drawScene();
+	}
+
+	function drawScene(){
+    	gl.clear(gl.COLOR_BUFFER_BIT);
+		gl.uniform4f(uColor, Math.random(), Math.random(), Math.random(), 1);
+
+		//投影矩阵
+		var projectMat = mkProjection(canvas.width, canvas.height);
+
+		//平移军阵
+		var translateMat = mkTranslate(trans[0], trans[1]);
+
+		//旋转矩阵
+		var rotationMat = mkRotation(rotate);
+
+		//切换中心矩阵
+		var moveOriginMat = mkTranslate(65, 75);
+
+		//缩放矩阵
+		var scaleMat = mkScale(scale);
+
+		var mat = intMat();
+		
+		//顺序也重要
+		mat = multiply(mat, projectMat);
+		mat = multiply(mat, moveOriginMat);
+		mat = multiply(mat, scaleMat);
+		mat = multiply(mat, rotationMat);
+		mat = multiply(mat, translateMat);
+		gl.uniformMatrix3fv(uMatrix, false, mat);
+		gl.drawArrays(gl.TRIANGLES, 0, 18)
+	}
+
+	//只绘制一次
+	setRetangle(gl);	
+	drawScene();
+	function setRange(range){
+		return Math.floor(Math.random()* range);
+	}
+
+	//右->下->逆时针
+	function setRetangle(gl){
+		var height = 150;
+		var width = 100;
+		var offset = 30;
+		var x = 0, y = 0;
+		gl.bufferData(
+			gl.ARRAY_BUFFER, 
+			new Float32Array([//逆时针
+
+				//left
+				x, y,
+				x+offset, y,
+				x+offset, y+height,
+				x+offset, y+height,
+				x, y,
+				x, y+height,
+
+				//top
+				x+ offset, y + height - offset,
+				x+ offset+ width, y + height - offset,
+				x+ offset + width, y + height,
+				x+ offset + width, y + height,
+				x+ offset, y + height - offset,
+				x+ offset, y + height,
+
+				//middle
+				x+ offset, y + height/2 - offset,
+				x+ offset+ width/2, y + height/2 - offset,
+				x+ offset + width/2, y + height/2,
+				x+ offset + width/2, y + height/2,
+				x+ offset, y + height/2 - offset,
+				x+ offset, y + height/2,
+			]),
+			gl.STATIC_DRAW
+		);
+	}
+
+
+</script>
