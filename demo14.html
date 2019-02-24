@@ -95,17 +95,24 @@ function main() {
 
     const texture = loadTexture(gl, 'img.png');
 
-  // Draw the scene repeatedly
   function render(now) {
-    now *= 0.001;  // convert to seconds
-    const deltaTime = now - then;
-    then = now;
-
-    drawScene(gl, programInfo, buffers, texture, deltaTime);
-
+        now *= 0.001; 
+        const deltaTime = now - then;
+        then = now;
+        drawScene(gl, programInfo, buffers, texture, deltaTime);
+        cubeRotation += deltaTime;
+        requestAnimationFrame(render);
+    }
     requestAnimationFrame(render);
-  }
-  requestAnimationFrame(render);
+
+    canvas.addEventListener('click', e=>{
+        drawScene(gl, programInfo, buffers, texture);
+        var pixels = new Uint8Array(4); 
+        gl.readPixels(e.offsetX, window.innerHeight - e.offsetY, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        console.log(pixels)
+        drawScene(gl, programInfo, buffers, texture);
+    });
+
 
 }
 
@@ -246,6 +253,8 @@ function initBuffers(gl) {
 }
 
 
+
+
 // Draw the scene.
 function drawScene(gl, programInfo, buffers, texture, deltaTime) {
   gl.clearColor(0.0, 0.0, 0.0, 1.0);  // Clear to black, fully opaque
@@ -369,7 +378,6 @@ function drawScene(gl, programInfo, buffers, texture, deltaTime) {
     const offset = 0;
     gl.drawElements(gl.TRIANGLES, vertexCount, type, offset);
   }
-  cubeRotation += deltaTime;
 }
 
 

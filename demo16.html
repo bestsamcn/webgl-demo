@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-<title>demo15</title>
+<title>demo16</title>
 <meta name="description" content="">
 <meta name="keywords" content="">
 <script src="https://mdn.github.io/webgl-examples/tutorial/gl-matrix.js"></script>
@@ -25,7 +25,7 @@ main();
 // Start here
 var cubeRotation = 0.0;
 var viewport = {
-    Z:-15,
+    Z:0,
     X:0,
     Y:0,
     RX:0,
@@ -411,20 +411,41 @@ function drawScene(gl, programInfo, buffers, texture, texture2, texture3) {
     const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
     const zNear = 0.1;//最近
     const zFar = 100.0;//最远
+
+    //视锥体，透视投影矩阵
     const projectionMatrix = mat4.create();
     mat4.perspective(projectionMatrix, fieldOfView, aspect, zNear, zFar);
 
-    const modelViewMatrix = mat4.create();
-    
-    //z坐标表示距离屏幕视口的距离，愈小则越远，物体越小
-    mat4.translate(modelViewMatrix, modelViewMatrix, [viewport.X, -viewport.Y, viewport.Z]);
-    
+    //模型矩阵
+    const modelMatrix = mat4.create();
+
+    //视图矩阵
+    mat4.translate(modelMatrix, modelMatrix, [viewport.X, viewport.Y, -viewport.Z]);
+
     //旋转，围绕z轴
-    mat4.rotate(modelViewMatrix,  modelViewMatrix, viewport.RX, [1, 0, 0]);       
+    mat4.rotate(modelMatrix,  modelMatrix, viewport.RX, [1, 0, 0]);       
     
     //旋转围绕y轴
-    mat4.rotate(modelViewMatrix, modelViewMatrix,viewport.RY, [0, 1, 0]);      
-    
+    mat4.rotate(modelMatrix, modelMatrix, -viewport.RY, [0, 1, 0]);  
+
+    //模型视图复合矩阵
+    const modelViewMatrix = mat4.create();
+
+    //视图矩阵
+    const viewMatrix = mat4.create();
+
+    //相机姿态矩阵
+    const cameraMatrix = mat4.create();
+
+    //相机姿态指向原点, 离原点15个单位，上下指向，camearaPos, target, up
+    mat4.lookAt(cameraMatrix, [0, 0, -15], [0, 0, 0], [0, -1, 0]);
+
+    //相机矩阵取逆拿视图矩阵
+    mat4.invert(viewMatrix, cameraMatrix);
+
+    //拿到模型视图矩阵
+    mat4.mul(modelViewMatrix, viewMatrix, modelMatrix);
+
     //三维立方体顶点赋值
     {
         const numComponents = 3;//三维
