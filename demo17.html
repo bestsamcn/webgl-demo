@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-<title>demo16</title>
+<title>demo17-分离贴图</title>
 <meta name="description" content="">
 <meta name="keywords" content="">
 <script src="https://mdn.github.io/webgl-examples/tutorial/gl-matrix.js"></script>
@@ -32,9 +32,10 @@ var viewport = {
     Y:0,
     RX:0,
     RY:0,
+    fov:45,
     cameraPos:[0, 0, -10],
-    cameraFront:[0, 0, 1],
-    cameraUp:[0, -1, 0]
+    cameraFront:[0, 0, -1],
+    cameraUp:[0, 1, 0]
 };
 function main() {
   
@@ -66,22 +67,26 @@ function main() {
         //法向量
 	    attribute vec3 aVertexNormal;
     
-        //2d纹理 vec2
-        attribute vec2 aTextureCoord;
+        //2d纹理 vec3 ,z用于判断纹理索引
+        attribute vec3 aTextureCoord;
 	   
 	    uniform mat4 uNormalMatrix;
         uniform mat4 uModelViewMatrix;
         uniform mat4 uProjectionMatrix;
-    
-        varying highp vec2 vTextureCoord;
+    	
+        varying highp vec3 vTextureCoord;
         varying highp vec3 vLighting;
 
         varying vec4 vPosition;
+        varying vec4 vViewPosition;
+
     
         void main() {
+			
 
             //一个齐次向量（点）乘变换矩阵可以获取其在变换后的位置, 矩阵相乘的顺序由讲究，投影-视图-模型
             vec4 pos = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
+            vViewPosition = uModelViewMatrix * aVertexPosition;
             gl_Position = pos;
             vTextureCoord = aTextureCoord;
         
@@ -110,24 +115,30 @@ function main() {
     const fsSource = `
 
         //外传变量
-        varying highp vec2 vTextureCoord;
+        varying highp vec3 vTextureCoord;
         varying highp vec3 vLighting;
 
+
         varying highp vec4 vPosition;
+        varying highp vec4 vViewPosition;
         
         uniform sampler2D uSampler;
+        uniform sampler2D uPlaneTexture;
         uniform highp vec4 uClipplane;
         void main() {
             
-            if( dot(vPosition, uClipplane) < 0.0){
+            if( dot(vViewPosition.xyz, uClipplane.xyz) < uClipplane.w){
                 discard;
             } 
-
-            highp vec4 texelColor = texture2D(uSampler, vTextureCoord);
-            // highp vec4 texelColor = vec4(0, 0, 0, 0.5);
-        
-            // gl_FragColor = vec4(0, 1, 1, 1);
-            gl_FragColor = vec4(texelColor.rgb*vLighting, texelColor.a);
+			
+			//当纹理索引为3，则为平面纹理
+			if(vTextureCoord.z == 3.0){
+				highp vec4 texelColor = texture2D(uPlaneTexture, vTextureCoord.xy);
+	            gl_FragColor = vec4(texelColor.rgb*vLighting, texelColor.a);
+			}else{
+				highp vec4 texelColor = texture2D(uSampler, vTextureCoord.xy);
+	            gl_FragColor = vec4(texelColor.rgb*vLighting, texelColor.a);
+			}
         }
     `;
 
@@ -150,6 +161,7 @@ function main() {
             normalMatrix: gl.getUniformLocation(shaderProgram, 'uNormalMatrix'),
             uSampler: gl.getUniformLocation(shaderProgram, 'uSampler'),
             uClipplane: gl.getUniformLocation(shaderProgram, 'uClipplane'),
+            uPlaneTexture: gl.getUniformLocation(shaderProgram, 'uPlaneTexture'),
         },
     };
 
@@ -159,12 +171,13 @@ function main() {
     const texture = loadTexture(gl, '3.jpg');
     const texture2 = loadTexture(gl, 'timg.jpg');
     const texture3 = loadTexture(gl, 'cloud.png');
+    const planeTexture = loadTexture(gl, '4.jpg');
 
     function render(now) {
         now *= 0.001; 
         const deltaTime = now - then;
         then = now;
-        drawScene(gl, programInfo, buffers, texture, texture2, texture3);
+        drawScene(gl, programInfo, buffers, texture, texture2, texture3, planeTexture);
         cubeRotation += deltaTime;
         requestAnimationFrame(render);
     }
@@ -172,7 +185,7 @@ function main() {
 
     //点击
     canvas.addEventListener('click', e=>{
-        console.log(viewport)
+    	return false;
         let x = 2*(e.clientX - 9 - 400/2)/400;
         let y = 2*(400/2 + 9 - e.clientY)/400;
         
@@ -191,31 +204,39 @@ function main() {
         c[2] = a[0]*b[8] + a[1]*b[9] + a[2]*b[10] + a[3]*b[11];
         c[3] = a[0]*b[12] + a[1]*b[13] + a[2]*b[14] + a[3]*b[15];
         console.log(c)
-        drawScene(gl, programInfo, buffers, texture, texture2, texture3);
+        drawScene(gl, programInfo, buffers, texture, texture2, texture3, planeTexture);
         var pixels = new Uint8Array(4); 
         gl.readPixels(event.clientX, event.clientY, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-        drawScene(gl, programInfo, buffers, texture, texture2, texture3);
+        drawScene(gl, programInfo, buffers, texture, texture2, texture3, planeTexture);
     });
 
-    //缩放
+    //缩放-采用相机视图域替代，模型z轴
     canvas.addEventListener('mousewheel',e=>{
+        // if(e.deltaY < 0){
+        //     viewport.Z+=2;
+        // }else{
+        //     viewport.Z-=2;
+        // }
         if(e.deltaY < 0){
-            viewport.Z+=2;
+            viewport.fov-=2;
         }else{
-            viewport.Z-=2;
+            viewport.fov+=2;
         }
     },false);
 
     //左键旋转
     canvas.addEventListener('mousedown',e=>{
         if(e.button != 0) return;
+        var beforex =e.clientX;
+        var beforey =e.clientY;
         var a = e=>{
-
             //移动位置转换为规范的坐标（-1， 1），9为margin
-            let x = 2*(e.clientX - 9 - 400/2)/400*5;
-            let y = 2*(400/2 + 9 - e.clientY)/400*5;
-            viewport.RX = -y;
-            viewport.RY = x;
+            let x = (e.clientX-beforex)/200;
+            let y = (e.clientY-beforey)/200;
+            viewport.RX -= y;
+            viewport.RY -= x;
+			beforex = e.clientX;
+			beforey = e.clientY;
             e.preventDefault();
         }
         document.onmousemove = a;
@@ -223,19 +244,21 @@ function main() {
             document.onmousemove = null;
             document.onmouseup = null;
         } 
-        e.preventDefault();
     },false);
     
     //中键移动
     canvas.addEventListener('mousedown',e=>{
         if(e.button != 1) return;
+        var beforex =e.clientX;
+        var beforey =e.clientY;
         var a = e=>{
 
-            //移动位置转换为规范的坐标（-1， 1），9为margin
-            let x = 2*(e.clientX - 9 - 400/2)/400*5;
-            let y = 2*(400/2 + 9 - e.clientY)/400*5;
-            viewport.Y = -y;
-            viewport.X = x;
+        	let x = (e.clientX-beforex)/100;
+            let y = (e.clientY-beforey)/100;
+			beforex = e.clientX;
+			beforey = e.clientY;
+            viewport.Y -= y;
+            viewport.X += x;
             e.preventDefault();
         }
         document.onmousemove = a;
@@ -243,8 +266,7 @@ function main() {
             document.onmousemove = null;
             document.onmouseup = null;
         } 
-        e.preventDefault();
-    },false);
+    }, false);
     
     //左右
     document.addEventListener('keypress',e=>{
@@ -263,7 +285,6 @@ function main() {
         vec3.normalize(temp3, temp2);
         if(e.key == 'a') vec3.sub(viewport.cameraPos, viewport.cameraPos, temp3);
         if(e.key == 'd') vec3.add(viewport.cameraPos, viewport.cameraPos, temp3);
-        e.preventDefault();
     },false);
     
     //前后
@@ -272,26 +293,27 @@ function main() {
         var temp = vec3.create();
         var temp2 = vec3.create();
         var temp3 = vec3.create();
-
-
         
         //阻尼移动
         vec3.mul(temp, viewport.cameraFront, [cameraSpeed*20, cameraSpeed*20, cameraSpeed*20]);
         if(e.key == 'w') vec3.add(viewport.cameraPos, viewport.cameraPos, temp);
         if(e.key == 's') vec3.sub(viewport.cameraPos, viewport.cameraPos, temp);
-        e.preventDefault();
     },false);
-    
-    var firstMouse = true;
-    //鼠标右键旋转
+
+    //y轴
+    var yaw = 0;
+
+    //x轴
+    var pitch = 0;
+
+    //鼠标右键旋转相机
     canvas.addEventListener('mousedown',e=>{
         if(e.button != 2) return;
         var lastX = e.clientX;
         var lastY = e.clientY;
-        var yaw = 0;
-        var pitch = 0;
+        
         var a = e=>{
-
+             console.log('ddd')
             //移动位置转换为规范的坐标（-1， 1），9为margin
             // let x = 2*(e.clientX - 9 - 400/2)/400*5;
             // let y = 2*(400/2 + 9 - e.clientY)/400*5;
@@ -299,7 +321,6 @@ function main() {
             // viewport.RY = x;
             var xPos = e.clientX;
             var yPos = e.clientY;
-            console.log(lastY)
             var xoffset = xPos - lastX;   //别忘了，在窗口中，左边的坐标小于右边的坐标，而我们需要一个正的角度
             var yoffset = yPos - lastY;   //同样，在窗口中，下面的坐标大于上面的坐标，而我们往上抬头的时候需要一个正的角度
             lastX = xPos;
@@ -322,7 +343,7 @@ function main() {
             var front = vec3.create();
             front[0]= -Math.sin(yaw*Math.PI/180) * Math.cos(pitch*Math.PI/180);
             front[1] = Math.sin(pitch*Math.PI/180);
-            front[3] = -Math.cos(pitch*Math.PI/180) * Math.cos(yaw*Math.PI/180);
+            front[2] = -Math.cos(pitch*Math.PI/180) * Math.cos(yaw*Math.PI/180);
             vec3.normalize(viewport.cameraFront, front);
             e.preventDefault();
         }
@@ -455,43 +476,41 @@ function initBuffers(gl) {
     //2d坐标，针对当前面
     const textureCoordinates = [
         // Front
-        0.0,  0.0,
-        1.0,  0.0,
-        1.0,  1.0,
-        0.0,  1.0,
+        0.0,  0.0, 1.0,
+        1.0,  0.0, 1.0,
+        1.0,  1.0, 1.0,
+        0.0,  1.0, 1.0,
         // Back
-        0.0,  0.0,
-        1.0,  0.0,
-        1.0,  1.0,
-        0.0,  1.0,
+        0.0,  0.0, 1.0,
+        1.0,  0.0, 1.0,
+        1.0,  1.0, 1.0,
+        0.0,  1.0, 1.0,
         // Top
-        0.0,  0.0,
-        1.0,  0.0,
-        1.0,  1.0,
-        0.0,  1.0,
+        0.0,  0.0, 1.0,
+        1.0,  0.0, 1.0,
+        1.0,  1.0, 1.0,
+        0.0,  1.0, 1.0,
         // Bottom
-        0.0,  0.0,
-        1.0,  0.0,
-        1.0,  1.0,
-        0.0,  1.0,
+        0.0,  0.0, 1.0,
+        1.0,  0.0, 1.0,
+        1.0,  1.0, 1.0,
+        0.0,  1.0, 1.0,
         // Right
-        0.0,  0.0,
-        1.0,  0.0,
-        1.0,  1.0,
-        0.0,  1.0,
+        0.0,  0.0, 1.0,
+        1.0,  0.0, 1.0,
+        1.0,  1.0, 1.0,
+        0.0,  1.0, 1.0,
         // Left
-        0.0,  0.0,
-        1.0,  0.0,
-        1.0,  1.0,
-        0.0,  1.0,
+        0.0,  0.0, 1.0,
+        1.0,  0.0, 1.0,
+        1.0,  1.0, 1.0,
+        0.0,  1.0, 1.0,
 
         // Bottom
-        0.0,  0.0,
-        1.0,  0.0,
-        1.0,  1.0,
-        0.0,  1.0
-
-
+        0.0,  0.0, 3.0,
+        1.0,  0.0, 3.0,
+        1.0,  1.0, 3.0,
+        0.0,  1.0, 3.0,
     ];
 
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(textureCoordinates), gl.STATIC_DRAW);
@@ -520,8 +539,7 @@ function initBuffers(gl) {
 }
 
 
-// Draw the scene.
-function drawScene(gl, programInfo, buffers, texture, texture2, texture3) {
+function drawScene(gl, programInfo, buffers, texture, texture2, texture3, planeTexture) {
     
     
     
@@ -530,7 +548,7 @@ function drawScene(gl, programInfo, buffers, texture, texture2, texture3) {
     // drawbg(gl, texture2, texture3);
     
     
-    const fieldOfView = 45 * Math.PI / 180;   //45度角，转为弧度
+    const fieldOfView = viewport.fov * Math.PI / 180;   //45度角，转为弧度
     const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
     const zNear = 0.1;//最近
     const zFar = 100.0;//最远
@@ -548,7 +566,7 @@ function drawScene(gl, programInfo, buffers, texture, texture2, texture3) {
     //旋转，围绕z轴
     mat4.rotate(modelMatrix,  modelMatrix, viewport.RX, [1, 0, 0]);       
     
-    //旋转围绕y轴
+    // //旋转围绕y轴
     mat4.rotate(modelMatrix, modelMatrix, -viewport.RY, [0, 1, 0]);  
 
     //模型视图复合矩阵
@@ -605,7 +623,7 @@ function drawScene(gl, programInfo, buffers, texture, texture2, texture3) {
 
     //纹理坐标赋值
     {
-        const numComponents = 2;
+        const numComponents = 3;
         const type = gl.FLOAT;
         const normalize = false;
         const stride = 0;
@@ -648,16 +666,24 @@ function drawScene(gl, programInfo, buffers, texture, texture2, texture3) {
         programInfo.uniformLocations.normalMatrix,
         false,
         normalMatrix);
+
+    //添加纹理映射
+	gl.uniform1i(programInfo.uniformLocations.uSampler, 0); //设置该纹理的索引为0, 也就是第一个纹理
+    gl.uniform1i(programInfo.uniformLocations.uPlaneTexture, 1);//设置该纹理的索引为1，也就是第二个纹理
     
-    //激活第一个纹理
+    //激活第一个纹理，gl.TEXTURE0中0便是我们设置的第一个纹理，索引为0；
     gl.activeTexture(gl.TEXTURE0);
-    
+
     //绑定纹理数据
     gl.bindTexture(gl.TEXTURE_2D, texture);
     
-    //赋值纹理数据
-    gl.uniform1i(programInfo.uniformLocations.uSampler, 0);//第一层纹理
-    gl.uniform4fv(programInfo.uniformLocations.uClipplane, [1.0, 0.0, 0.0, 0.0]);//第一层纹理
+    //激活第二个纹理
+    gl.activeTexture(gl.TEXTURE1);
+    
+    //绑定纹理数据
+    gl.bindTexture(gl.TEXTURE_2D, planeTexture);
+    
+    gl.uniform4fv(programInfo.uniformLocations.uClipplane, [1.0, 0.0, 0.0, -10.0]);//裁剪面
     {
         const vertexCount = 42;
         const type = gl.UNSIGNED_SHORT;
