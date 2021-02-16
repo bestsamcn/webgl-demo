@@ -285,7 +285,7 @@ function main() {
         vec3.normalize(temp3, temp2);
         if(e.key == 'a') vec3.sub(viewport.cameraPos, viewport.cameraPos, temp3);
         if(e.key == 'd') vec3.add(viewport.cameraPos, viewport.cameraPos, temp3);
-    },false);
+    },true);
     
     //前后
     document.addEventListener('keypress',e=>{
@@ -296,9 +296,9 @@ function main() {
         
         //阻尼移动
         vec3.mul(temp, viewport.cameraFront, [cameraSpeed*20, cameraSpeed*20, cameraSpeed*20]);
-        if(e.key == 'w') vec3.add(viewport.cameraPos, viewport.cameraPos, temp);
-        if(e.key == 's') vec3.sub(viewport.cameraPos, viewport.cameraPos, temp);
-    },false);
+        if(e.key == 'w') vec3.sub(viewport.cameraPos, viewport.cameraPos, temp);
+        if(e.key == 's') vec3.add(viewport.cameraPos, viewport.cameraPos, temp);
+    },true);
 
     //y轴
     var yaw = 0;
