@@ -2,7 +2,7 @@
  * @Description: shadow
  * @Author: Sam
  * @Date: 2021-02-10 15:43:45
- * @LastEditTime: 2021-02-18 13:55:09
+ * @LastEditTime: 2021-02-19 11:28:44
  * @LastEditors: Sam
 -->
 <html>
@@ -23,6 +23,7 @@
 </head>
 
 <body>
+    <button id="btn">click</button>
     <canvas id="canvas" height="800" width="800"></canvas>
 </body>
 
@@ -34,9 +35,12 @@
 
 <script>
     window.addEventListener('load', () => {
-
+        
+        
         const canvas = document.getElementById('canvas');
+        
         const gl = getWebGLContext(canvas);
+        window.gl = gl;
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
 
@@ -242,6 +246,8 @@
         const plan = createPlanBuffer(gl);
         const fbo = createFBO(gl);
 
+
+        //激活0号纹理，注意后面的uniform1i，传值为0，对应了gl.TEXTURE0
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, fbo.texture);
 
@@ -270,7 +276,8 @@
         const modelMatrix = new Matrix4();
         const mvpMatrixFromLightPlan = new Matrix4();
         const mvpMatrixFromLightTriangle = new Matrix4();
-        (function tick() {
+
+        const drawScene = ()=>{
             currentAngle = animate(currentAngle);
             gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
             gl.viewport(0, 0, offsetWidth, offsetHeight);
@@ -336,7 +343,9 @@
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
             gl.useProgram(program);
-            gl.uniform1i(program.u_ShadowMap, 0.0);
+
+            //将0号纹理，传递给u_ShadowMap
+            gl.uniform1i(program.u_ShadowMap, 0);
 
 
             //绘制三角形
@@ -388,9 +397,31 @@
                 gl.drawElements(gl.TRIANGLES, plan.indexLength, gl.UNSIGNED_BYTE, 0);
             }
 
-
+        }
+        (function tick() {
+            drawScene();
             requestAnimationFrame(tick);
         })();
+
+        const btn = document.getElementById('btn');
+        btn.onclick = ()=>{
+            drawScene();
+            canvas.toBlob((blob) => {
+                saveBlob(blob, `screencapture-${canvas.width}x${canvas.height}.png`);
+            });
+        }
+        const saveBlob = (function() {
+            
+            const a = document.createElement('a');
+            document.body.appendChild(a);
+            a.style.display = 'none';
+            return function saveData(blob, fileName) {
+                const url = window.URL.createObjectURL(blob);
+                a.href = url;
+                a.download = fileName;
+                a.click();
+            };
+        }());
 
 
     });
