@@ -1,0 +1,389 @@
+<!--
+ * @Description: render to texture
+ * @Author: SZEWEC
+ * @Date: 2021-02-24 11:19:46
+ * @LastEditTime: 2021-02-24 13:47:21
+ * @LastEditors: Sam
+-->
+<html>
+<title>texture</title>
+
+<head>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #canvas {
+            margin: 0;
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <button id="btn">click</button>
+    <canvas id="canvas" height="800" width="800"></canvas>
+</body>
+
+</html>
+<script src="gl_lib/webgl-utils.js"></script>
+<script src="gl_lib/webgl-debug.js"></script>
+<script src="gl_lib/cuon-utils.js"></script>
+<script src="gl_lib/cuon-matrix.js"></script>
+
+<script>
+    window.addEventListener('load', () => {
+
+
+        const canvas = document.getElementById('canvas');
+
+        const gl = getWebGLContext(canvas);
+        window.gl = gl;
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const resolution = 256;
+        const offsetWidth = 256;
+        const offsetHeight = 256;
+        const shininess = 7.0;
+
+        const lightDirection = [0.5, 0.7, 1];
+        const spotLightPotision = [20, 30, 50];
+        const viewPosition = [0, 0, 2];
+
+        const spotLightColor = [1.0, 0.4, 0.5];
+
+
+        const VS = `
+            attribute vec4 a_Position;
+            attribute vec2 a_TextureCoord;
+            uniform mat4 u_MvpMatrix;
+            varying vec2 v_TextureCoord;
+            void main(){
+                v_TextureCoord = a_TextureCoord;
+                gl_Position = u_MvpMatrix * a_Position;
+            }
+       `;
+
+        const FS = `
+            precision mediump float;
+            uniform sampler2D u_Texture;
+            varying vec2 v_TextureCoord;
+            void main(){
+                vec4 textureColor = texture2D(u_Texture, v_TextureCoord);
+                gl_FragColor.rgba = textureColor;
+            }
+       `;
+
+        //创建程序
+        const program = createProgram(gl, VS, FS);
+        program.a_Position = gl.getAttribLocation(program, 'a_Position');
+        program.a_TextureCoord = gl.getAttribLocation(program, 'a_TextureCoord');
+        program.u_Texture = gl.getUniformLocation(program, 'u_Texture');
+        program.u_MvpMatrix = gl.getUniformLocation(program, 'u_MvpMatrix');
+        function isPowerOf2(value) {
+            return (value & (value - 1)) === 0;
+        }
+        //建立缓存
+        const createFBuffer = (gl) => {
+
+            const obj = {};
+
+            const coords = new Float32Array(
+                [
+                    0, 0,
+                    0, 1,
+                    1, 0,
+                    0, 1,
+                    1, 1,
+                    1, 0,
+
+                    0, 0,
+                    0, 1,
+                    1, 0,
+                    1, 0,
+                    0, 1,
+                    1, 1,
+
+                    0, 0,
+                    0, 1,
+                    1, 0,
+                    0, 1,
+                    1, 1,
+                    1, 0,
+
+                    0, 0,
+                    0, 1,
+                    1, 0,
+                    1, 0,
+                    0, 1,
+                    1, 1,
+
+                    0, 0,
+                    0, 1,
+                    1, 0,
+                    0, 1,
+                    1, 1,
+                    1, 0,
+
+                    0, 0,
+                    0, 1,
+                    1, 0,
+                    1, 0,
+                    0, 1,
+                    1, 1,
+
+                ]);
+
+            const vertexes = new Float32Array(
+                [
+                    -0.5, -0.5, -0.5,
+                    -0.5, 0.5, -0.5,
+                    0.5, -0.5, -0.5,
+                    -0.5, 0.5, -0.5,
+                    0.5, 0.5, -0.5,
+                    0.5, -0.5, -0.5,
+
+                    -0.5, -0.5, 0.5,
+                    0.5, -0.5, 0.5,
+                    -0.5, 0.5, 0.5,
+                    -0.5, 0.5, 0.5,
+                    0.5, -0.5, 0.5,
+                    0.5, 0.5, 0.5,
+
+                    -0.5, 0.5, -0.5,
+                    -0.5, 0.5, 0.5,
+                    0.5, 0.5, -0.5,
+                    -0.5, 0.5, 0.5,
+                    0.5, 0.5, 0.5,
+                    0.5, 0.5, -0.5,
+
+                    -0.5, -0.5, -0.5,
+                    0.5, -0.5, -0.5,
+                    -0.5, -0.5, 0.5,
+                    -0.5, -0.5, 0.5,
+                    0.5, -0.5, -0.5,
+                    0.5, -0.5, 0.5,
+
+                    -0.5, -0.5, -0.5,
+                    -0.5, -0.5, 0.5,
+                    -0.5, 0.5, -0.5,
+                    -0.5, -0.5, 0.5,
+                    -0.5, 0.5, 0.5,
+                    -0.5, 0.5, -0.5,
+
+                    0.5, -0.5, -0.5,
+                    0.5, 0.5, -0.5,
+                    0.5, -0.5, 0.5,
+                    0.5, -0.5, 0.5,
+                    0.5, 0.5, -0.5,
+                    0.5, 0.5, 0.5,
+
+                ]);
+
+            const buffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+            gl.bufferData(gl.ARRAY_BUFFER, vertexes, gl.STATIC_DRAW);
+            buffer.count = vertexes.length;
+            buffer.num = 3;
+            buffer.type = gl.FLOAT;
+            obj.vertexBuffer = buffer;
+
+
+
+            const coordBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, coordBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, coords, gl.STATIC_DRAW);
+            coordBuffer.num = 2;
+            coordBuffer.type = gl.FLOAT;
+            obj.coordBuffer = coordBuffer;
+
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, null);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+
+
+            return obj;
+        }
+
+        const F = createFBuffer(gl);
+
+        gl.clearColor(1.0, 1.0, 1.0, 1.0);
+        gl.enable(gl.CULL_FACE);
+        gl.enable(gl.DEPTH_TEST);
+
+        const fbo = gl.createFramebuffer();
+        const ftexture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, ftexture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 512, 512, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, ftexture, 0);
+
+        const depthBuffer = gl.createRenderbuffer();
+        gl.bindRenderbuffer(gl.RENDERBUFFER, depthBuffer);
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, 512, 512);
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthBuffer);
+
+
+        
+        const texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 255, 255, 255]));
+
+        const img = new Image();
+        img.src = 'https://webglfundamentals.org/webgl/lessons/resources/mip-low-res-enlarged.png';
+        img.crossOrigin = true;
+        img.onload = () => {
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+
+            // Check if the image is a power of 2 in both dimensions.
+            if (isPowerOf2(img.width) && isPowerOf2(img.height)) {
+                // Yes, it's a power of 2. Generate mips.
+                gl.generateMipmap(gl.TEXTURE_2D);
+            } else {
+                // No, it's not a power of 2. Turn of mips and set wrapping to clamp to edge
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            }
+        }
+
+
+        const VPMatrix = new Matrix4();
+        VPMatrix.setPerspective(60, canvas.width / canvas.height, 1.0, 2000.0);
+        VPMatrix.lookAt(0, 0, 3, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0);
+
+        var angle_step = 30;
+        var last = new Date();
+        function animate(angle) {
+            var now = new Date();
+            var elapsed = now - last;
+            last = now;
+            var newAngle = angle + (angle_step * elapsed) / 1000.0;
+            return newAngle % 360;
+        }
+        let currentAngle = 0;
+
+        const globelMVPMatrix = new Matrix4();
+        const modelMatrix = new Matrix4();
+
+
+        const drawScene = () => {
+            currentAngle = animate(currentAngle);
+           
+
+            gl.enable(gl.CULL_FACE);
+            gl.enable(gl.DEPTH_TEST);
+
+            gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+
+            
+            gl.clearColor(0, 1, 1, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+
+            gl.viewport(0, 0, 512, 512);
+
+            {          
+                gl.useProgram(program);
+
+                //以下数据可谓两个fbo使用
+                gl.bindBuffer(gl.ARRAY_BUFFER, F.vertexBuffer);
+                gl.vertexAttribPointer(program.a_Position, F.vertexBuffer.num, F.vertexBuffer.type, false, 0, 0);
+                gl.enableVertexAttribArray(program.a_Position);
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, F.coordBuffer);
+                gl.vertexAttribPointer(program.a_TextureCoord, F.coordBuffer.num, F.coordBuffer.type, false, 0, 0);
+                gl.enableVertexAttribArray(program.a_TextureCoord);
+
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.uniform1i(program.u_Texture, 0);
+
+
+
+                globelMVPMatrix.set(VPMatrix);
+                modelMatrix.setScale(1.5, 1.5, 1.5);
+                globelMVPMatrix.multiply(modelMatrix);
+
+                gl.uniformMatrix4fv(program.u_MvpMatrix, false, globelMVPMatrix.elements);
+                gl.drawArrays(gl.TRIANGLES, 0, F.vertexBuffer.count/3);
+
+                globelMVPMatrix.set(VPMatrix);
+                
+                modelMatrix.setTranslate(1,0, 0);
+                modelMatrix.rotate(currentAngle*1.5, 0, 1, 1);
+                globelMVPMatrix.multiply(modelMatrix);
+
+                gl.uniformMatrix4fv(program.u_MvpMatrix, false, globelMVPMatrix.elements);
+                gl.drawArrays(gl.TRIANGLES, 0, F.vertexBuffer.count/3);
+            } 
+
+
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            gl.clearColor(1, 1, 1, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            gl.viewport(0, 0, canvas.width, canvas.height);
+            gl.bindTexture(gl.TEXTURE_2D, ftexture);
+
+            
+            {          
+                gl.useProgram(program);
+
+                //以下数据可谓两个fbo使用
+                gl.bindBuffer(gl.ARRAY_BUFFER, F.vertexBuffer);
+                gl.vertexAttribPointer(program.a_Position, F.vertexBuffer.num, F.vertexBuffer.type, false, 0, 0);
+                gl.enableVertexAttribArray(program.a_Position);
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, F.coordBuffer);
+                gl.vertexAttribPointer(program.a_TextureCoord, F.coordBuffer.num, F.coordBuffer.type, false, 0, 0);
+                gl.enableVertexAttribArray(program.a_TextureCoord);
+
+                
+                gl.uniform1i(program.u_Texture, 0);
+
+                globelMVPMatrix.set(VPMatrix);
+                // modelMatrix.setRotate(currentAngle, 1, 1, 1);
+                // globelMVPMatrix.multiply(modelMatrix);
+
+                gl.uniformMatrix4fv(program.u_MvpMatrix, false, globelMVPMatrix.elements);
+
+                gl.drawArrays(gl.TRIANGLES, 0, F.vertexBuffer.count/3);
+            } 
+
+        }
+        (function tick() {
+            drawScene();
+            requestAnimationFrame(tick);
+        })();
+
+        const btn = document.getElementById('btn');
+        btn.onclick = () => {
+            drawScene();
+            canvas.toBlob((blob) => {
+                saveBlob(blob, `screencapture-${canvas.width}x${canvas.height}.png`);
+            });
+        }
+        const saveBlob = (function () {
+
+            const a = document.createElement('a');
+            document.body.appendChild(a);
+            a.style.display = 'none';
+            return function saveData(blob, fileName) {
+                const url = window.URL.createObjectURL(blob);
+                a.href = url;
+                a.download = fileName;
+                a.click();
+            };
+        }());
+
+
+    });
+</script>

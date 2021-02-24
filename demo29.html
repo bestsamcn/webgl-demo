@@ -1,0 +1,743 @@
+<!--
+ * @Description: sprite
+ * @Author: SZEWEC
+ * @Date: 2021-02-24 11:19:46
+ * @LastEditTime: 2021-02-24 17:02:15
+ * @LastEditors: Sam
+-->
+<html>
+<title>texture</title>
+
+<head>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #canvas {
+            margin: 0;
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <button id="btn">click</button>
+    <canvas id="canvas" height="800" width="800"></canvas>
+</body>
+
+</html>
+<script src="gl_lib/webgl-utils.js"></script>
+<script src="gl_lib/webgl-debug.js"></script>
+<script src="gl_lib/cuon-utils.js"></script>
+<script src="gl_lib/cuon-matrix.js"></script>
+
+<script>
+    window.addEventListener('load', () => {
+
+
+        const canvas = document.getElementById('canvas');
+
+        const gl = getWebGLContext(canvas);
+        window.gl = gl;
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const resolution = 256;
+        const offsetWidth = 256;
+        const offsetHeight = 256;
+        const shininess = 7.0;
+
+        const lightDirection = [0.5, 0.7, 1];
+        const spotLightPotision = [20, 30, 50];
+        const viewPosition = [0, 0, 2];
+
+        const spotLightColor = [1.0, 0.4, 0.5];
+
+        const btn = document.getElementById('btn');
+        let run = true;
+        btn.onclick = () => {
+            run = !run;
+        }
+
+
+        const VS = `
+            attribute vec4 a_Position;
+            attribute vec2 a_TextureCoord;
+            uniform mat4 u_MvpMatrix;
+            varying vec2 v_TextureCoord;
+            void main(){
+                v_TextureCoord = a_TextureCoord;
+                gl_Position = u_MvpMatrix * a_Position;
+            }
+       `;
+
+        const FS = `
+            precision mediump float;
+            uniform sampler2D u_Texture;
+            varying vec2 v_TextureCoord;
+            void main(){
+                vec4 textureColor = texture2D(u_Texture, v_TextureCoord);
+                gl_FragColor.rgba = textureColor;
+            }
+       `;
+
+        //创建程序
+        const program = createProgram(gl, VS, FS);
+        program.a_Position = gl.getAttribLocation(program, 'a_Position');
+        program.a_TextureCoord = gl.getAttribLocation(program, 'a_TextureCoord');
+        program.u_Texture = gl.getUniformLocation(program, 'u_Texture');
+        program.u_MvpMatrix = gl.getUniformLocation(program, 'u_MvpMatrix');
+        function isPowerOf2(value) {
+            return (value & (value - 1)) === 0;
+        }
+        //建立缓存
+        const createFBuffer = (gl) => {
+
+            /**
+             *      / |
+             *     /  |
+             *    /   |
+             *   ------
+            */
+
+            const obj = {};
+
+            const vertexes = new Float32Array([
+                // left column front
+                0, 0, 0,
+                0, 150, 0,
+                30, 0, 0,
+                0, 150, 0,
+                30, 150, 0,
+                30, 0, 0,
+
+                // top rung front
+                30, 0, 0,
+                30, 30, 0,
+                100, 0, 0,
+                30, 30, 0,
+                100, 30, 0,
+                100, 0, 0,
+
+                // middle rung front
+                30, 60, 0,
+                30, 90, 0,
+                67, 60, 0,
+                30, 90, 0,
+                67, 90, 0,
+                67, 60, 0,
+
+                // left column back
+                0, 0, 30,
+                30, 0, 30,
+                0, 150, 30,
+                0, 150, 30,
+                30, 0, 30,
+                30, 150, 30,
+
+                // top rung back
+                30, 0, 30,
+                100, 0, 30,
+                30, 30, 30,
+                30, 30, 30,
+                100, 0, 30,
+                100, 30, 30,
+
+                // middle rung back
+                30, 60, 30,
+                67, 60, 30,
+                30, 90, 30,
+                30, 90, 30,
+                67, 60, 30,
+                67, 90, 30,
+
+                // top
+                0, 0, 0,
+                100, 0, 0,
+                100, 0, 30,
+                0, 0, 0,
+                100, 0, 30,
+                0, 0, 30,
+
+                // top rung right
+                100, 0, 0,
+                100, 30, 0,
+                100, 30, 30,
+                100, 0, 0,
+                100, 30, 30,
+                100, 0, 30,
+
+                // under top rung
+                30, 30, 0,
+                30, 30, 30,
+                100, 30, 30,
+                30, 30, 0,
+                100, 30, 30,
+                100, 30, 0,
+
+                // between top rung and middle
+                30, 30, 0,
+                30, 60, 30,
+                30, 30, 30,
+                30, 30, 0,
+                30, 60, 0,
+                30, 60, 30,
+
+                // top of middle rung
+                30, 60, 0,
+                67, 60, 30,
+                30, 60, 30,
+                30, 60, 0,
+                67, 60, 0,
+                67, 60, 30,
+
+                // right of middle rung
+                67, 60, 0,
+                67, 90, 30,
+                67, 60, 30,
+                67, 60, 0,
+                67, 90, 0,
+                67, 90, 30,
+
+                // bottom of middle rung.
+                30, 90, 0,
+                30, 90, 30,
+                67, 90, 30,
+                30, 90, 0,
+                67, 90, 30,
+                67, 90, 0,
+
+                // right of bottom
+                30, 90, 0,
+                30, 150, 30,
+                30, 90, 30,
+                30, 90, 0,
+                30, 150, 0,
+                30, 150, 30,
+
+                // bottom
+                0, 150, 0,
+                0, 150, 30,
+                30, 150, 30,
+                0, 150, 0,
+                30, 150, 30,
+                30, 150, 0,
+
+                // left side
+                0, 0, 0,
+                0, 0, 30,
+                0, 150, 30,
+                0, 0, 0,
+                0, 150, 30,
+                0, 150, 0]);
+
+            const normals = new Float32Array([
+                // left column front
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+
+                // top rung front
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+
+                // middle rung front
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+
+                // left column back
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+
+                // top rung back
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+
+                // middle rung back
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+
+                // top
+                0, 1, 0,
+                0, 1, 0,
+                0, 1, 0,
+                0, 1, 0,
+                0, 1, 0,
+                0, 1, 0,
+
+                // top rung right
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+
+                // under top rung
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+
+                // between top rung and middle
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+
+                // top of middle rung
+                0, 1, 0,
+                0, 1, 0,
+                0, 1, 0,
+                0, 1, 0,
+                0, 1, 0,
+                0, 1, 0,
+
+                // right of middle rung
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+
+                // bottom of middle rung.
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+
+                // right of bottom
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+
+                // bottom
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+
+                // left side
+                -1, 0, 0,
+                -1, 0, 0,
+                -1, 0, 0,
+                -1, 0, 0,
+                -1, 0, 0,
+                -1, 0, 0]);
+
+            const coords = new Float32Array([
+                // left column front
+                38 / 255, 44 / 255,
+                38 / 255, 223 / 255,
+                113 / 255, 44 / 255,
+                38 / 255, 223 / 255,
+                113 / 255, 223 / 255,
+                113 / 255, 44 / 255,
+
+                // top rung front
+                113 / 255, 44 / 255,
+                113 / 255, 85 / 255,
+                218 / 255, 44 / 255,
+                113 / 255, 85 / 255,
+                218 / 255, 85 / 255,
+                218 / 255, 44 / 255,
+
+                // middle rung front
+                113 / 255, 112 / 255,
+                113 / 255, 151 / 255,
+                203 / 255, 112 / 255,
+                113 / 255, 151 / 255,
+                203 / 255, 151 / 255,
+                203 / 255, 112 / 255,
+
+                // left column back
+                38 / 255, 44 / 255,
+                113 / 255, 44 / 255,
+                38 / 255, 223 / 255,
+                38 / 255, 223 / 255,
+                113 / 255, 44 / 255,
+                113 / 255, 223 / 255,
+
+                // top rung back
+                113 / 255, 44 / 255,
+                218 / 255, 44 / 255,
+                113 / 255, 85 / 255,
+                113 / 255, 85 / 255,
+                218 / 255, 44 / 255,
+                218 / 255, 85 / 255,
+
+                // middle rung back
+                113 / 255, 112 / 255,
+                203 / 255, 112 / 255,
+                113 / 255, 151 / 255,
+                113 / 255, 151 / 255,
+                203 / 255, 112 / 255,
+                203 / 255, 151 / 255,
+
+                // under top rung
+                0, 0,
+                0, 1,
+                1, 1,
+                0, 0,
+                1, 1,
+                1, 0,
+
+                // between top rung and middle
+                0, 0,
+                1, 1,
+                0, 1,
+                0, 0,
+                1, 0,
+                1, 1,
+
+                // top of middle rung
+                0, 0,
+                1, 1,
+                0, 1,
+                0, 0,
+                1, 0,
+                1, 1,
+
+                // right of middle rung
+                0, 0,
+                1, 1,
+                0, 1,
+                0, 0,
+                1, 0,
+                1, 1,
+
+                // bottom of middle rung.
+                0, 0,
+                0, 1,
+                1, 1,
+                0, 0,
+                1, 1,
+                1, 0,
+
+                // right of bottom
+                0, 0,
+                1, 1,
+                0, 1,
+                0, 0,
+                1, 0,
+                1, 1,
+
+                // bottom
+                0, 0,
+                0, 1,
+                1, 1,
+                0, 0,
+                1, 1,
+                1, 0,
+
+                // left side
+                0, 0,
+                0, 1,
+                1, 1,
+                0, 0,
+                1, 1,
+                1, 0
+            ]);
+
+            const buffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+            gl.bufferData(gl.ARRAY_BUFFER, vertexes, gl.STATIC_DRAW);
+            buffer.count = vertexes.length;
+            buffer.num = 3;
+            buffer.type = gl.FLOAT;
+            obj.vertexBuffer = buffer;
+
+
+            const normalBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, normals, gl.STATIC_DRAW);
+            normalBuffer.count = normalBuffer.length;
+            normalBuffer.num = 3;
+            normalBuffer.type = gl.FLOAT;
+            obj.normalBuffer = normalBuffer;
+
+
+            const coordBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, coordBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, coords, gl.STATIC_DRAW);
+            coordBuffer.num = 2;
+            coordBuffer.type = gl.FLOAT;
+            obj.coordBuffer = coordBuffer;
+
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, null);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+
+
+            return obj;
+        }
+
+
+        const ceateRectBuffer = () => {
+
+            const obj = {};
+            const vertexes = new Float32Array([
+
+                -50.0, 25.0, 0,
+                -50.0, -25.0, 0,
+                50.0, -25.0, 0,
+
+                -50.0, 25.0, 0,
+                50.0, -25.0, 0,
+                50.0, 25.0, 0,
+            ]);
+
+            const coords = new Float32Array([
+
+                0.0, 1.0,
+                0.0, 0.0,
+                1.0, 0.0,
+
+                0.0, 1.0,
+                1.0, 0.0,
+                1.0, 1.0,
+            ]);
+
+            const vertexBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, vertexes, gl.STATIC_DRAW);
+            vertexBuffer.num = 3;
+            vertexBuffer.count = vertexes.length / 3;
+            vertexBuffer.type = gl.FLOAT;
+            obj.vertexBuffer = vertexBuffer;
+
+
+            const coordBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, coordBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, coords, gl.STATIC_DRAW);
+            coordBuffer.num = 2;
+            vertexBuffer.count = coords.length / 2;
+            coordBuffer.type = gl.FLOAT;
+            obj.coordBuffer = coordBuffer;
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, null);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+            return obj;
+
+        }
+
+        const F = createFBuffer(gl);
+        const rect = ceateRectBuffer(gl);
+
+
+
+        gl.clearColor(1.0, 1.0, 1.0, 1.0);
+        gl.enable(gl.CULL_FACE);
+        gl.enable(gl.DEPTH_TEST);
+
+        var textCtx = document.createElement("canvas").getContext("2d");
+
+        // Puts text in center of canvas.
+        function makeTextCanvas(text, width, height) {
+            textCtx.canvas.width = width;
+            textCtx.canvas.height = height;
+            textCtx.font = "20px monospace";
+            textCtx.textAlign = "center";
+            textCtx.textBaseline = "middle";
+            textCtx.fillStyle = "black";
+            textCtx.clearRect(0, 0, textCtx.canvas.width, textCtx.canvas.height);
+            textCtx.fillText(text, width / 2, height / 2);
+            return textCtx.canvas;
+        }
+
+        const hello = makeTextCanvas('hello', 100, 50);
+
+        const helloTexture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, helloTexture);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, hello);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+
+
+        const texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 255, 255, 255]));
+
+        const img = new Image();
+        img.src = 'https://webglfundamentals.org/webgl/lessons/resources/mip-low-res-enlarged.png';
+        img.crossOrigin = true;
+        img.onload = () => {
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+
+            // Check if the image is a power of 2 in both dimensions.
+            if (isPowerOf2(img.width) && isPowerOf2(img.height)) {
+                // Yes, it's a power of 2. Generate mips.
+                gl.generateMipmap(gl.TEXTURE_2D);
+            } else {
+                // No, it's not a power of 2. Turn of mips and set wrapping to clamp to edge
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            }
+        }
+
+
+        const PMatrix = new Matrix4();
+        PMatrix.setPerspective(60, canvas.width / canvas.height, 1.0, 2000.0);
+        const VMatrix = new Matrix4();
+        VMatrix.setLookAt(0, 0, 200, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0);
+
+        const VPMatrix = PMatrix.multiply(VMatrix);
+
+        var angle_step = 30;
+        var last = new Date();
+        function animate(angle) {
+            var now = new Date();
+            var elapsed = now - last;
+            last = now;
+            var newAngle = angle + (angle_step * elapsed) / 1000.0;
+            return newAngle % 360;
+        }
+        let currentAngle = 0;
+
+        const globelMVPMatrix = new Matrix4();
+        const modelMatrix = new Matrix4();
+        const textMatrix = new Matrix4();
+
+
+        const drawScene = () => {
+            if(!run) return;
+            currentAngle = animate(currentAngle);
+
+
+            gl.enable(gl.CULL_FACE);
+            gl.enable(gl.DEPTH_TEST);
+
+            gl.viewport(0, 0, canvas.width, canvas.height);
+            gl.clearColor(1, 1, 1, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            //颜色混合，将f上rect的 白色更换为f的源颜色
+            gl.enable(gl.BLEND);
+
+            //result = src * src_alpah + (1 - src_alpha) * dist; src为rect， dist为f
+
+            // gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+            gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+
+
+            gl.useProgram(program);
+
+            {
+
+                //以下数据可谓两个fbo使用
+                gl.bindBuffer(gl.ARRAY_BUFFER, F.vertexBuffer);
+                gl.vertexAttribPointer(program.a_Position, F.vertexBuffer.num, F.vertexBuffer.type, false, 0, 0);
+                gl.enableVertexAttribArray(program.a_Position);
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, F.coordBuffer);
+                gl.vertexAttribPointer(program.a_TextureCoord, F.coordBuffer.num, F.coordBuffer.type, false, 0, 0);
+                gl.enableVertexAttribArray(program.a_TextureCoord);
+
+
+                gl.bindTexture(gl.TEXTURE_2D, texture);
+                gl.uniform1i(program.u_Texture, 0);
+
+
+                globelMVPMatrix.set(VPMatrix);
+                modelMatrix.setRotate(currentAngle, 1, 1, 1);
+                modelMatrix.scale(0.5, 0.5, 0.5);
+                modelMatrix.translate(100, -50, 0);
+
+                globelMVPMatrix.multiply(modelMatrix);
+
+                gl.uniformMatrix4fv(program.u_MvpMatrix, false, globelMVPMatrix.elements);
+                gl.drawArrays(gl.TRIANGLES, 0, F.vertexBuffer.count / 3);
+
+            }
+
+            {
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, rect.vertexBuffer);
+                gl.vertexAttribPointer(program.a_Position, rect.vertexBuffer.num, rect.vertexBuffer.type, false, 0, 0);
+                gl.enableVertexAttribArray(program.a_Position);
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, rect.coordBuffer);
+                gl.vertexAttribPointer(program.a_TextureCoord, rect.coordBuffer.num, rect.coordBuffer.type, false, 0, 0);
+                gl.enableVertexAttribArray(program.a_TextureCoord);
+
+
+                gl.bindTexture(gl.TEXTURE_2D, helloTexture);
+                gl.uniform1i(program.u_Texture, 0);
+
+                // gl.disable(gl.CULL_FACE);
+                const pos = [modelMatrix.elements[12], modelMatrix.elements[13], modelMatrix.elements[14]];
+
+                
+                let vec3 = new Vector3(pos);
+                vec3 = VMatrix.multiplyVector3(vec3);
+                vec3.normalize();
+                const x = pos[0] - vec3.elements[0] * 150;
+                const y = pos[1] - vec3.elements[1] * 150;
+                const z = pos[2] - vec3.elements[2] * 150;
+                const factor = 1 / -canvas.height; //一个像素的在视图空间的距离
+                const scale = factor * z; //移动z距离
+                modelMatrix.setTranslate(x, y, z);
+                modelMatrix.scale(1+scale, 1+scale, 1);
+
+                globelMVPMatrix.set(PMatrix);
+                globelMVPMatrix.multiply(VMatrix);
+                globelMVPMatrix.multiply(modelMatrix);
+                gl.uniformMatrix4fv(program.u_MvpMatrix, false, globelMVPMatrix.elements);
+                gl.drawArrays(gl.TRIANGLES, 0, rect.vertexBuffer.count);
+            }
+
+        }
+        (function tick() {
+            drawScene();
+            requestAnimationFrame(tick);
+        })();
+
+
+
+
+
+    });
+</script>
