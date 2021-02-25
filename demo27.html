@@ -223,26 +223,34 @@
         
         const texture = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 255, 255, 255]));
+        const tx = 2, ty = 2, len = 4;
+        // gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
 
-        const img = new Image();
-        img.src = 'https://webglfundamentals.org/webgl/lessons/resources/mip-low-res-enlarged.png';
-        img.crossOrigin = true;
-        img.onload = () => {
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, tx, ty, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([
+            255, 0, 0, 255,  0, 255, 0, 255,
+            0, 0, 255, 255,  0, 0, 0, 255,
+        ]));
 
-            // Check if the image is a power of 2 in both dimensions.
-            if (isPowerOf2(img.width) && isPowerOf2(img.height)) {
-                // Yes, it's a power of 2. Generate mips.
-                gl.generateMipmap(gl.TEXTURE_2D);
-            } else {
-                // No, it's not a power of 2. Turn of mips and set wrapping to clamp to edge
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-            }
-        }
+        // const img = new Image();
+        // img.src = 'https://webglfundamentals.org/webgl/lessons/resources/mip-low-res-enlarged.png';
+        // img.crossOrigin = true;
+        // img.onload = () => {
+        //     gl.bindTexture(gl.TEXTURE_2D, texture);
+        //     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+
+        //     // Check if the image is a power of 2 in both dimensions.
+        //     if (isPowerOf2(img.width) && isPowerOf2(img.height)) {
+        //         // Yes, it's a power of 2. Generate mips.
+        //         gl.generateMipmap(gl.TEXTURE_2D);
+        //     } else {
+        //         // No, it's not a power of 2. Turn of mips and set wrapping to clamp to edge
+        //         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        //         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        //         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        //     }
+        // }
 
 
         const VPMatrix = new Matrix4();
@@ -272,8 +280,12 @@
             gl.enable(gl.DEPTH_TEST);
 
             gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+
+            
             gl.clearColor(0, 1, 1, 1);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+
             gl.viewport(0, 0, 256, 256);
 
             {          
@@ -305,7 +317,7 @@
             gl.clearColor(1, 1, 1, 1);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
             gl.viewport(0, 0, canvas.width, canvas.height);
-            gl.bindTexture(gl.TEXTURE_2D, ftexture);
+            // gl.bindTexture(gl.TEXTURE_2D, ftexture);
 
             
             {          
@@ -320,7 +332,7 @@
                 gl.vertexAttribPointer(program.a_TextureCoord, F.coordBuffer.num, F.coordBuffer.type, false, 0, 0);
                 gl.enableVertexAttribArray(program.a_TextureCoord);
 
-                
+                gl.bindTexture(gl.TEXTURE_2D, texture);
                 gl.uniform1i(program.u_Texture, 0);
 
                 globelMVPMatrix.set(VPMatrix);
