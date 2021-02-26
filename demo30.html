@@ -2,7 +2,7 @@
  * @Description: pick
  * @Author: SZEWEC
  * @Date: 2021-02-24 11:19:46
- * @LastEditTime: 2021-02-26 12:39:28
+ * @LastEditTime: 2021-02-26 17:56:51
  * @LastEditors: Sam
 -->
 <html>
@@ -66,7 +66,7 @@
             varying vec4 v_Color;
             uniform vec4 v_HighLight;
             void main(){
-                gl_FragColor.rgba = v_Color * v_HighLight;
+                gl_FragColor.rgba = v_Color;
             }
        `;
 
@@ -82,7 +82,7 @@
             precision mediump float;
             uniform vec4 a_Color;
             void main(){
-                gl_FragColor.rgba = vec4(1.0, 0.0, 0.0, 1.0);
+                gl_FragColor.rgba = a_Color;
             }
        `
 
@@ -582,25 +582,25 @@
         // const translate1 = [random(-50, 50), random(-50, 50), random(-50, 50)];
         const translate1 = [-10, -20, -30];
         const translate2 = [-5, 10, 40];
-        const translate3 = [15, 20, 10];
+        const translate3 = [50, 20, 10];
 
         const id1 = [
-          ((1 >>  0) & 0xFF) / 0xFF,
-          ((1 >>  8) & 0xFF) / 0xFF,
-          ((1 >> 16) & 0xFF) / 0xFF,
-          ((1 >> 24) & 0xFF) / 0xFF,
+            ((1 >> 0) & 0xFF) / 0xFF,
+            ((1 >> 8) & 0xFF) / 0xFF,
+            ((1 >> 16) & 0xFF) / 0xFF,
+            ((1 >> 24) & 0xFF) / 0xFF,
         ]
-        const id2 =  [
-          ((2 >>  0) & 0xFF) / 0xFF,
-          ((2 >>  8) & 0xFF) / 0xFF,
-          ((2 >> 16) & 0xFF) / 0xFF,
-          ((2 >> 24) & 0xFF) / 0xFF,
+        const id2 = [
+            ((2 >> 0) & 0xFF) / 0xFF,
+            ((2 >> 8) & 0xFF) / 0xFF,
+            ((2 >> 16) & 0xFF) / 0xFF,
+            ((2 >> 24) & 0xFF) / 0xFF,
         ]
         const id3 = [
-          ((3 >>  0) & 0xFF) / 0xFF,
-          ((3 >>  8) & 0xFF) / 0xFF,
-          ((3 >> 16) & 0xFF) / 0xFF,
-          ((3 >> 24) & 0xFF) / 0xFF,
+            ((3 >> 0) & 0xFF) / 0xFF,
+            ((3 >> 8) & 0xFF) / 0xFF,
+            ((3 >> 16) & 0xFF) / 0xFF,
+            ((3 >> 24) & 0xFF) / 0xFF,
         ]
 
         gl.enable(gl.CULL_FACE);
@@ -610,7 +610,7 @@
 
         }
         const drawScene = () => {
-            // currentAngle = animate(currentAngle);
+            currentAngle = animate(currentAngle);
 
             gl.bindFramebuffer(gl.FRAMEBUFFER, null);
             gl.viewport(0, 0, canvas.width, canvas.height);
@@ -628,13 +628,11 @@
 
                 globelMVPMatrix.set(VPMatrix);
                 modelMatrix.setTranslate(...translate1);
-                modelMatrix.rotate(0, 1, 1, 1);
+                modelMatrix.rotate(currentAngle, 1, 1, 1);
                 sphereMatrix.set(modelMatrix);
                 globelMVPMatrix.multiply(modelMatrix);
                 gl.uniformMatrix4fv(pickProgram.u_MvpMatrix, false, globelMVPMatrix.elements);
-
-
-                gl.uniformMatrix4fv(pickProgram.u_Color, false, id1);
+                gl.uniform4fv(pickProgram.u_Color, id1);
 
                 gl.drawArrays(gl.TRIANGLES, 0, sphereBufferInfo.numElements);
             }
@@ -645,11 +643,11 @@
                 gl.vertexAttribPointer(pickProgram.a_Position, position.numComponents, position.type, position.normalize, 0, 0);
                 gl.enableVertexAttribArray(pickProgram.a_Position);
 
-                gl.uniformMatrix4fv(pickProgram.u_Color, false, id2);
+                gl.uniform4fv(pickProgram.u_Color, id2);
 
                 globelMVPMatrix.set(VPMatrix);
                 modelMatrix.setTranslate(...translate2);
-                modelMatrix.rotate(1, 1, 1, 1);
+                modelMatrix.rotate(currentAngle, 1, 1, 1);
                 coneMatrix.set(modelMatrix);
                 globelMVPMatrix.multiply(modelMatrix);
                 gl.uniformMatrix4fv(pickProgram.u_MvpMatrix, false, globelMVPMatrix.elements);
@@ -662,19 +660,17 @@
                 gl.vertexAttribPointer(pickProgram.a_Position, position.numComponents, position.type, position.normalize, 0, 0);
                 gl.enableVertexAttribArray(pickProgram.a_Position);
 
-                gl.uniformMatrix4fv(pickProgram.u_Color, false, id3);
+                gl.uniform4fv(pickProgram.u_Color, id3);
 
                 globelMVPMatrix.set(VPMatrix);
                 modelMatrix.setTranslate(...translate3);
-                modelMatrix.rotate(2, 1, 1, 1);
+                modelMatrix.rotate(currentAngle, 1, 1, 1);
                 cubeMatrix.set(modelMatrix);
                 globelMVPMatrix.multiply(modelMatrix);
                 gl.uniformMatrix4fv(pickProgram.u_MvpMatrix, false, globelMVPMatrix.elements);
 
-                gl.drawArrays(gl.TRIANGLES, 0, cubeBufferInfo.numComponents);
+                gl.drawArrays(gl.TRIANGLES, 0, cubeBufferInfo.numElements);
             }
-            return;
-
             const pixelX = mouseX * gl.canvas.width / gl.canvas.clientWidth;
             const pixelY = gl.canvas.height - mouseY * gl.canvas.height / gl.canvas.clientHeight - 1;
             const data = new Uint8Array(4);
@@ -688,12 +684,13 @@
                 data);             // typed array to hold result
             const id = data[0] + (data[1] << 8) + (data[2] << 16) + (data[3] << 24);
             console.log(id, data)
+
+
             gl.bindFramebuffer(gl.FRAMEBUFFER, null);
             gl.viewport(0, 0, canvas.width, canvas.height);
-            gl.clearColor(0, 0, 0, 1);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
             gl.useProgram(program);
-            
+
 
             {
                 const position = sphereBufferInfo.attribs.a_position;
@@ -710,10 +707,10 @@
                 modelMatrix.set(sphereMatrix);
                 globelMVPMatrix.multiply(modelMatrix);
 
-                if(id === '1'){
+                if (id === '1') {
                     gl.uniform4f(program.u_HighLight, false, 1, 1, 0, 1);
-                }else{
-                    gl.uniform4f(program.u_HighLight, false,  0, 0, 0, 0);
+                } else {
+                    gl.uniform4f(program.u_HighLight, false, 0, 0, 0, 0);
                 }
                 gl.uniformMatrix4fv(program.u_MvpMatrix, false, globelMVPMatrix.elements);
 
@@ -721,7 +718,7 @@
             }
 
 
-           
+
 
             {
                 const position = coneBufferInfo.attribs.a_position;
@@ -736,10 +733,10 @@
                 globelMVPMatrix.set(VPMatrix);
                 modelMatrix.set(coneMatrix);
                 globelMVPMatrix.multiply(modelMatrix);
-                if(id === '2'){
+                if (id === '2') {
                     gl.uniform4f(program.u_HighLight, false, 1, 1, 0, 1);
-                }else{
-                    gl.uniform4f(program.u_HighLight, false,  0, 0, 0, 0)
+                } else {
+                    gl.uniform4f(program.u_HighLight, false, 0, 0, 0, 0)
                 }
                 gl.uniformMatrix4fv(program.u_MvpMatrix, false, globelMVPMatrix.elements);
                 gl.drawArrays(gl.TRIANGLES, 0, coneBufferInfo.numElements);
@@ -760,9 +757,9 @@
                 globelMVPMatrix.multiply(modelMatrix);
                 gl.uniformMatrix4fv(program.u_MvpMatrix, false, globelMVPMatrix.elements);
 
-                if(id === '3'){
+                if (id === '3') {
                     gl.uniform4f(program.u_HighLight, false, 1, 1, 0, 1);
-                }else{
+                } else {
 
                     gl.uniform4f(program.u_HighLight, false, 0, 0, 0, 0);
                 }
