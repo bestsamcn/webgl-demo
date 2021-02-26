@@ -2,7 +2,7 @@
  * @Description: pick
  * @Author: SZEWEC
  * @Date: 2021-02-24 11:19:46
- * @LastEditTime: 2021-02-25 20:22:52
+ * @LastEditTime: 2021-02-26 12:39:28
  * @LastEditors: Sam
 -->
 <html>
@@ -82,7 +82,7 @@
             precision mediump float;
             uniform vec4 a_Color;
             void main(){
-                gl_FragColor.rgba = a_Color;
+                gl_FragColor.rgba = vec4(1.0, 0.0, 0.0, 1.0);
             }
        `
 
@@ -579,9 +579,10 @@
             return obj;
         }
         const F = createFBuffer(gl);
-        const translate1 = [random(-50, 50), random(-50, 50), random(-50, 50)];
-        const translate2 = [random(-100, 100), random(-100, 100), random(-50, 50)];
-        const translate3 = [random(-50, 50), random(-50, 50), random(-50, 50)];
+        // const translate1 = [random(-50, 50), random(-50, 50), random(-50, 50)];
+        const translate1 = [-10, -20, -30];
+        const translate2 = [-5, 10, 40];
+        const translate3 = [15, 20, 10];
 
         const id1 = [
           ((1 >>  0) & 0xFF) / 0xFF,
@@ -611,7 +612,7 @@
         const drawScene = () => {
             // currentAngle = animate(currentAngle);
 
-            gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
             gl.viewport(0, 0, canvas.width, canvas.height);
             gl.clearColor(1, 1, 1, 1);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -627,7 +628,7 @@
 
                 globelMVPMatrix.set(VPMatrix);
                 modelMatrix.setTranslate(...translate1);
-                modelMatrix.rotate(currentAngle, 1, 1, 1);
+                modelMatrix.rotate(0, 1, 1, 1);
                 sphereMatrix.set(modelMatrix);
                 globelMVPMatrix.multiply(modelMatrix);
                 gl.uniformMatrix4fv(pickProgram.u_MvpMatrix, false, globelMVPMatrix.elements);
@@ -648,7 +649,7 @@
 
                 globelMVPMatrix.set(VPMatrix);
                 modelMatrix.setTranslate(...translate2);
-                modelMatrix.rotate(currentAngle, 1, 1, 1);
+                modelMatrix.rotate(1, 1, 1, 1);
                 coneMatrix.set(modelMatrix);
                 globelMVPMatrix.multiply(modelMatrix);
                 gl.uniformMatrix4fv(pickProgram.u_MvpMatrix, false, globelMVPMatrix.elements);
@@ -665,13 +666,14 @@
 
                 globelMVPMatrix.set(VPMatrix);
                 modelMatrix.setTranslate(...translate3);
-                modelMatrix.rotate(currentAngle, 1, 1, 1);
+                modelMatrix.rotate(2, 1, 1, 1);
                 cubeMatrix.set(modelMatrix);
                 globelMVPMatrix.multiply(modelMatrix);
                 gl.uniformMatrix4fv(pickProgram.u_MvpMatrix, false, globelMVPMatrix.elements);
 
                 gl.drawArrays(gl.TRIANGLES, 0, cubeBufferInfo.numComponents);
             }
+            return;
 
             const pixelX = mouseX * gl.canvas.width / gl.canvas.clientWidth;
             const pixelY = gl.canvas.height - mouseY * gl.canvas.height / gl.canvas.clientHeight - 1;
