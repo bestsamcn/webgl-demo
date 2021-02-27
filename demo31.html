@@ -1,0 +1,789 @@
+<!--
+ * @Description: pick texture in frustum
+ * @Author: SZEWEC
+ * @Date: 2021-02-24 11:19:46
+ * @LastEditTime: 2021-02-27 23:35:30
+ * @LastEditors: Sam
+-->
+<html>
+<title>texture</title>
+
+<head>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+
+        #canvas {
+            margin: 0;
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="canvas" height="800" width="800"></canvas>
+</body>
+
+</html>
+<script src="https://webglfundamentals.org/webgl/resources/webgl-utils.js"></script>
+<script src="https://webglfundamentals.org/webgl/resources/m4.js"></script>
+<script src="https://webglfundamentals.org/webgl/resources/primitives.js"></script>
+<script src="gl_lib/webgl-utils.js"></script>
+<script src="gl_lib/webgl-debug.js"></script>
+<script src="gl_lib/cuon-utils.js"></script>
+<script src="gl_lib/cuon-matrix.js"></script>
+
+<script>
+    window.addEventListener('load', () => {
+
+
+        const canvas = document.getElementById('canvas');
+
+        const gl = getWebGLContext(canvas);
+        window.gl = gl;
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let mouseX = -1;
+        let mouseY = -1;
+
+
+        const VS = `
+            attribute vec4 a_Position;
+            uniform mat4 u_MvpMatrix;
+            attribute vec4 a_Color;
+            varying vec4 v_Color;
+            void main(){
+                v_Color = a_Color;
+                gl_Position = u_MvpMatrix * a_Position;
+            }
+       `;
+
+        const FS = `
+            precision mediump float;
+            varying vec4 v_Color;
+            uniform vec4 u_HighLight;
+            void main(){
+                gl_FragColor.rgba = v_Color * u_HighLight;
+            }
+       `;
+
+        const pickVS = `
+            attribute vec4 a_Position;
+            uniform mat4 u_MvpMatrix;
+            void main(){
+                gl_Position = u_MvpMatrix * a_Position;
+            }
+       `;
+
+        const pickFS = `
+            precision mediump float;
+            uniform vec4 u_Color;
+            void main(){
+                gl_FragColor.rgba = u_Color;
+            }
+       `
+
+        //创建程序
+        const program = createProgram(gl, VS, FS);
+        program.a_Position = gl.getAttribLocation(program, 'a_Position');
+        program.a_Color = gl.getAttribLocation(program, 'a_Color');
+        program.u_MvpMatrix = gl.getUniformLocation(program, 'u_MvpMatrix');
+        program.u_HighLight = gl.getUniformLocation(program, 'u_HighLight');
+
+
+        const pickProgram = createProgram(gl, pickVS, pickFS);
+
+        pickProgram.a_Position = gl.getAttribLocation(pickProgram, 'a_Position');
+        pickProgram.u_Color = gl.getUniformLocation(pickProgram, 'u_Color');
+        pickProgram.u_MvpMatrix = gl.getUniformLocation(pickProgram, 'u_MvpMatrix');
+        function isPowerOf2(value) {
+            return (value & (value - 1)) === 0;
+        }
+
+        const sphereBufferInfo = primitives.createSphereWithVertexColorsBufferInfo(gl, 10, 12, 6);
+        const cubeBufferInfo = primitives.createCubeWithVertexColorsBufferInfo(gl, 20);
+        const coneBufferInfo = primitives.createTruncatedConeWithVertexColorsBufferInfo(gl, 10, 0, 20, 12, 1, true, false);
+
+        const shapes = [
+            sphereBufferInfo,
+            cubeBufferInfo,
+            coneBufferInfo,
+        ];
+
+
+
+        const fbo = gl.createFramebuffer();
+        const colorTexture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, colorTexture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, canvas.width, canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+
+        const depthBuffer = gl.createRenderbuffer();
+        gl.bindRenderbuffer(gl.RENDERBUFFER, depthBuffer);
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, canvas.width, canvas.height);
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, colorTexture, 0);
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depthBuffer);
+
+
+
+
+
+        const PMatrix = new Matrix4();
+        PMatrix.setPerspective(60, canvas.width / canvas.height, 1.0, 2000.0);
+        const VMatrix = new Matrix4();
+        VMatrix.setLookAt(0, 0, 300, 0.0, 0.0, 20.0, 0.0, 1.0, 0.0);
+
+        const VPMatrix = PMatrix.multiply(VMatrix);
+
+        var angle_step = 30;
+        var last = new Date();
+        function animate(angle) {
+            var now = new Date();
+            var elapsed = now - last;
+            last = now;
+            var newAngle = angle + (angle_step * elapsed) / 1000.0;
+            return newAngle % 360;
+        }
+        let currentAngle = 1;
+
+        const globelMVPMatrix = new Matrix4();
+        const modelMatrix = new Matrix4();
+
+        const sphereMatrix = new Matrix4();
+        const coneMatrix = new Matrix4();
+        const cubeMatrix = new Matrix4();
+        const highlight = [255, 255, 0, 255];
+        const random = (min, max) => {
+            return Math.random() * (max - min) + min;
+        }
+        const createFBuffer = (gl) => {
+
+            /**
+             *      / |
+             *     /  |
+             *    /   |
+             *   ------
+            */
+
+            const obj = {};
+
+            const vertexes = new Float32Array([
+                // left column front
+                0, 0, 0,
+                0, 150, 0,
+                30, 0, 0,
+                0, 150, 0,
+                30, 150, 0,
+                30, 0, 0,
+
+                // top rung front
+                30, 0, 0,
+                30, 30, 0,
+                100, 0, 0,
+                30, 30, 0,
+                100, 30, 0,
+                100, 0, 0,
+
+                // middle rung front
+                30, 60, 0,
+                30, 90, 0,
+                67, 60, 0,
+                30, 90, 0,
+                67, 90, 0,
+                67, 60, 0,
+
+                // left column back
+                0, 0, 30,
+                30, 0, 30,
+                0, 150, 30,
+                0, 150, 30,
+                30, 0, 30,
+                30, 150, 30,
+
+                // top rung back
+                30, 0, 30,
+                100, 0, 30,
+                30, 30, 30,
+                30, 30, 30,
+                100, 0, 30,
+                100, 30, 30,
+
+                // middle rung back
+                30, 60, 30,
+                67, 60, 30,
+                30, 90, 30,
+                30, 90, 30,
+                67, 60, 30,
+                67, 90, 30,
+
+                // top
+                0, 0, 0,
+                100, 0, 0,
+                100, 0, 30,
+                0, 0, 0,
+                100, 0, 30,
+                0, 0, 30,
+
+                // top rung right
+                100, 0, 0,
+                100, 30, 0,
+                100, 30, 30,
+                100, 0, 0,
+                100, 30, 30,
+                100, 0, 30,
+
+                // under top rung
+                30, 30, 0,
+                30, 30, 30,
+                100, 30, 30,
+                30, 30, 0,
+                100, 30, 30,
+                100, 30, 0,
+
+                // between top rung and middle
+                30, 30, 0,
+                30, 60, 30,
+                30, 30, 30,
+                30, 30, 0,
+                30, 60, 0,
+                30, 60, 30,
+
+                // top of middle rung
+                30, 60, 0,
+                67, 60, 30,
+                30, 60, 30,
+                30, 60, 0,
+                67, 60, 0,
+                67, 60, 30,
+
+                // right of middle rung
+                67, 60, 0,
+                67, 90, 30,
+                67, 60, 30,
+                67, 60, 0,
+                67, 90, 0,
+                67, 90, 30,
+
+                // bottom of middle rung.
+                30, 90, 0,
+                30, 90, 30,
+                67, 90, 30,
+                30, 90, 0,
+                67, 90, 30,
+                67, 90, 0,
+
+                // right of bottom
+                30, 90, 0,
+                30, 150, 30,
+                30, 90, 30,
+                30, 90, 0,
+                30, 150, 0,
+                30, 150, 30,
+
+                // bottom
+                0, 150, 0,
+                0, 150, 30,
+                30, 150, 30,
+                0, 150, 0,
+                30, 150, 30,
+                30, 150, 0,
+
+                // left side
+                0, 0, 0,
+                0, 0, 30,
+                0, 150, 30,
+                0, 0, 0,
+                0, 150, 30,
+                0, 150, 0]);
+
+            const normals = new Float32Array([
+                // left column front
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+
+                // top rung front
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+
+                // middle rung front
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+                0, 0, 1,
+
+                // left column back
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+
+                // top rung back
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+
+                // middle rung back
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+                0, 0, -1,
+
+                // top
+                0, 1, 0,
+                0, 1, 0,
+                0, 1, 0,
+                0, 1, 0,
+                0, 1, 0,
+                0, 1, 0,
+
+                // top rung right
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+
+                // under top rung
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+
+                // between top rung and middle
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+
+                // top of middle rung
+                0, 1, 0,
+                0, 1, 0,
+                0, 1, 0,
+                0, 1, 0,
+                0, 1, 0,
+                0, 1, 0,
+
+                // right of middle rung
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+
+                // bottom of middle rung.
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+
+                // right of bottom
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+                1, 0, 0,
+
+                // bottom
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+                0, -1, 0,
+
+                // left side
+                -1, 0, 0,
+                -1, 0, 0,
+                -1, 0, 0,
+                -1, 0, 0,
+                -1, 0, 0,
+                -1, 0, 0]);
+
+            const coords = new Float32Array([
+                // left column front
+                38 / 255, 44 / 255,
+                38 / 255, 223 / 255,
+                113 / 255, 44 / 255,
+                38 / 255, 223 / 255,
+                113 / 255, 223 / 255,
+                113 / 255, 44 / 255,
+
+                // top rung front
+                113 / 255, 44 / 255,
+                113 / 255, 85 / 255,
+                218 / 255, 44 / 255,
+                113 / 255, 85 / 255,
+                218 / 255, 85 / 255,
+                218 / 255, 44 / 255,
+
+                // middle rung front
+                113 / 255, 112 / 255,
+                113 / 255, 151 / 255,
+                203 / 255, 112 / 255,
+                113 / 255, 151 / 255,
+                203 / 255, 151 / 255,
+                203 / 255, 112 / 255,
+
+                // left column back
+                38 / 255, 44 / 255,
+                113 / 255, 44 / 255,
+                38 / 255, 223 / 255,
+                38 / 255, 223 / 255,
+                113 / 255, 44 / 255,
+                113 / 255, 223 / 255,
+
+                // top rung back
+                113 / 255, 44 / 255,
+                218 / 255, 44 / 255,
+                113 / 255, 85 / 255,
+                113 / 255, 85 / 255,
+                218 / 255, 44 / 255,
+                218 / 255, 85 / 255,
+
+                // middle rung back
+                113 / 255, 112 / 255,
+                203 / 255, 112 / 255,
+                113 / 255, 151 / 255,
+                113 / 255, 151 / 255,
+                203 / 255, 112 / 255,
+                203 / 255, 151 / 255,
+
+                // under top rung
+                0, 0,
+                0, 1,
+                1, 1,
+                0, 0,
+                1, 1,
+                1, 0,
+
+                // between top rung and middle
+                0, 0,
+                1, 1,
+                0, 1,
+                0, 0,
+                1, 0,
+                1, 1,
+
+                // top of middle rung
+                0, 0,
+                1, 1,
+                0, 1,
+                0, 0,
+                1, 0,
+                1, 1,
+
+                // right of middle rung
+                0, 0,
+                1, 1,
+                0, 1,
+                0, 0,
+                1, 0,
+                1, 1,
+
+                // bottom of middle rung.
+                0, 0,
+                0, 1,
+                1, 1,
+                0, 0,
+                1, 1,
+                1, 0,
+
+                // right of bottom
+                0, 0,
+                1, 1,
+                0, 1,
+                0, 0,
+                1, 0,
+                1, 1,
+
+                // bottom
+                0, 0,
+                0, 1,
+                1, 1,
+                0, 0,
+                1, 1,
+                1, 0,
+
+                // left side
+                0, 0,
+                0, 1,
+                1, 1,
+                0, 0,
+                1, 1,
+                1, 0
+            ]);
+
+            const buffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+            gl.bufferData(gl.ARRAY_BUFFER, vertexes, gl.STATIC_DRAW);
+            buffer.count = vertexes.length;
+            buffer.num = 3;
+            buffer.type = gl.FLOAT;
+            obj.vertexBuffer = buffer;
+
+
+            const normalBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, normals, gl.STATIC_DRAW);
+            normalBuffer.count = normalBuffer.length;
+            normalBuffer.num = 3;
+            normalBuffer.type = gl.FLOAT;
+            obj.normalBuffer = normalBuffer;
+
+
+            const coordBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, coordBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, coords, gl.STATIC_DRAW);
+            coordBuffer.num = 2;
+            coordBuffer.type = gl.FLOAT;
+            obj.coordBuffer = coordBuffer;
+
+
+            gl.bindBuffer(gl.ARRAY_BUFFER, null);
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
+
+
+            return obj;
+        }
+        const F = createFBuffer(gl);
+        // const translate1 = [random(-50, 50), random(-50, 50), random(-50, 50)];
+        const translate1 = [-10, -20, -30];
+        const translate2 = [-5, 10, 40];
+        const translate3 = [50, 20, 10];
+
+        const id1 = [
+            ((1 >> 0) & 0xFF) / 0xFF,
+            ((1 >> 8) & 0xFF) / 0xFF,
+            ((1 >> 16) & 0xFF) / 0xFF,
+            ((1 >> 24) & 0xFF) / 0xFF,
+        ]
+        const id2 = [
+            ((2 >> 0) & 0xFF) / 0xFF,
+            ((2 >> 8) & 0xFF) / 0xFF,
+            ((2 >> 16) & 0xFF) / 0xFF,
+            ((2 >> 24) & 0xFF) / 0xFF,
+        ]
+        const id3 = [
+            ((3 >> 0) & 0xFF) / 0xFF,
+            ((3 >> 8) & 0xFF) / 0xFF,
+            ((3 >> 16) & 0xFF) / 0xFF,
+            ((3 >> 24) & 0xFF) / 0xFF,
+        ]
+
+        gl.enable(gl.CULL_FACE);
+        gl.enable(gl.DEPTH_TEST);
+
+        const drawPickTexture = () => {
+
+        }
+        const drawScene = () => {
+            currentAngle = animate(currentAngle);
+
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            gl.viewport(0, 0, canvas.width, canvas.height);
+            gl.clearColor(1, 1, 1, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            // //绘制纹理
+            gl.useProgram(pickProgram);
+            {
+                const position = sphereBufferInfo.attribs.a_position;
+                gl.bindBuffer(gl.ARRAY_BUFFER, position.buffer);
+                gl.vertexAttribPointer(pickProgram.a_Position, position.numComponents, position.type, position.normalize, 0, 0);
+                gl.enableVertexAttribArray(pickProgram.a_Position);
+
+
+                globelMVPMatrix.set(VPMatrix);
+                modelMatrix.setTranslate(...translate1);
+                modelMatrix.rotate(currentAngle, 1, 1, 1);
+                sphereMatrix.set(modelMatrix);
+                globelMVPMatrix.multiply(modelMatrix);
+                gl.uniformMatrix4fv(pickProgram.u_MvpMatrix, false, globelMVPMatrix.elements);
+                gl.uniform4fv(pickProgram.u_Color, id1);
+
+                gl.drawArrays(gl.TRIANGLES, 0, sphereBufferInfo.numElements);
+            }
+
+            {
+                const position = coneBufferInfo.attribs.a_position;
+                gl.bindBuffer(gl.ARRAY_BUFFER, position.buffer);
+                gl.vertexAttribPointer(pickProgram.a_Position, position.numComponents, position.type, position.normalize, 0, 0);
+                gl.enableVertexAttribArray(pickProgram.a_Position);
+
+                gl.uniform4fv(pickProgram.u_Color, id2);
+
+                globelMVPMatrix.set(VPMatrix);
+                modelMatrix.setTranslate(...translate2);
+                modelMatrix.rotate(currentAngle, 1, 1, 1);
+                coneMatrix.set(modelMatrix);
+                globelMVPMatrix.multiply(modelMatrix);
+                gl.uniformMatrix4fv(pickProgram.u_MvpMatrix, false, globelMVPMatrix.elements);
+                gl.drawArrays(gl.TRIANGLES, 0, coneBufferInfo.numElements);
+            }
+
+            {
+                const position = cubeBufferInfo.attribs.a_position;
+                gl.bindBuffer(gl.ARRAY_BUFFER, position.buffer);
+                gl.vertexAttribPointer(pickProgram.a_Position, position.numComponents, position.type, position.normalize, 0, 0);
+                gl.enableVertexAttribArray(pickProgram.a_Position);
+
+                gl.uniform4fv(pickProgram.u_Color, id3);
+
+                globelMVPMatrix.set(VPMatrix);
+                modelMatrix.setTranslate(...translate3);
+                modelMatrix.rotate(currentAngle, 1, 1, 1);
+                cubeMatrix.set(modelMatrix);
+                globelMVPMatrix.multiply(modelMatrix);
+                gl.uniformMatrix4fv(pickProgram.u_MvpMatrix, false, globelMVPMatrix.elements);
+
+                gl.drawArrays(gl.TRIANGLES, 0, cubeBufferInfo.numElements);
+            }
+            const pixelX = mouseX * gl.canvas.width / gl.canvas.clientWidth;
+            const pixelY = gl.canvas.height - mouseY * gl.canvas.height / gl.canvas.clientHeight - 1;
+            const data = new Uint8Array(4);
+            gl.readPixels(
+                pixelX,            // x
+                pixelY,            // y
+                1,                 // width
+                1,                 // height
+                gl.RGBA,           // format
+                gl.UNSIGNED_BYTE,  // type
+                data);             // typed array to hold result
+            const id = data[0] + (data[1] << 8) + (data[2] << 16) + (data[3] << 24);
+            console.log(id, data)
+
+
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            gl.viewport(0, 0, canvas.width, canvas.height);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            gl.useProgram(program);
+
+
+            {
+                const position = sphereBufferInfo.attribs.a_position;
+                gl.bindBuffer(gl.ARRAY_BUFFER, position.buffer);
+                gl.vertexAttribPointer(program.a_Position, position.numComponents, position.type, false, 0, 0);
+                gl.enableVertexAttribArray(program.a_Position);
+
+                const color = sphereBufferInfo.attribs.a_color;
+                gl.bindBuffer(gl.ARRAY_BUFFER, color.buffer);
+                gl.vertexAttribPointer(program.a_Color, color.numComponents, color.type, color.normalize, 0, 0);
+                gl.enableVertexAttribArray(program.a_Color);
+
+                globelMVPMatrix.set(VPMatrix);
+                modelMatrix.set(sphereMatrix);
+                globelMVPMatrix.multiply(modelMatrix);
+
+                if (id === 1) {
+                    gl.uniform4fv(program.u_HighLight, [1, 0, 0, 1]);
+                } else {
+                    gl.uniform4fv(program.u_HighLight, [1, 1, 1, 1]);
+                }
+                gl.uniformMatrix4fv(program.u_MvpMatrix, false, globelMVPMatrix.elements);
+
+                gl.drawArrays(gl.TRIANGLES, 0, sphereBufferInfo.numElements);
+            }
+
+
+
+
+            {
+                const position = coneBufferInfo.attribs.a_position;
+                gl.bindBuffer(gl.ARRAY_BUFFER, position.buffer);
+                gl.vertexAttribPointer(program.a_Position, position.numComponents, position.type, position.normalize, 0, 0);
+                gl.enableVertexAttribArray(program.a_Position);
+
+                const color = coneBufferInfo.attribs.a_color;
+                gl.vertexAttribPointer(program.a_Color, color.numComponents, color.type, color.normalize, 0, 0);
+                gl.enableVertexAttribArray(program.a_Color);
+
+                globelMVPMatrix.set(VPMatrix);
+                modelMatrix.set(coneMatrix);
+                globelMVPMatrix.multiply(modelMatrix);
+                if (id === 2) {
+                    gl.uniform4fv(program.u_HighLight, [1, 0, 0, 1]);
+                } else {
+                    gl.uniform4fv(program.u_HighLight, [1, 1, 1, 1]);
+                }
+                gl.uniformMatrix4fv(program.u_MvpMatrix, false, globelMVPMatrix.elements);
+                gl.drawArrays(gl.TRIANGLES, 0, coneBufferInfo.numElements);
+            }
+
+            {
+                const position = cubeBufferInfo.attribs.a_position;
+                gl.bindBuffer(gl.ARRAY_BUFFER, position.buffer);
+                gl.vertexAttribPointer(program.a_Position, position.numComponents, position.type, position.normalize, 0, 0);
+                gl.enableVertexAttribArray(program.a_Position);
+
+                const color = cubeBufferInfo.attribs.a_color;
+                gl.vertexAttribPointer(program.a_Color, color.numComponents, color.type, color.normalize, 0, 0);
+                gl.enableVertexAttribArray(program.a_Color);
+
+                globelMVPMatrix.set(VPMatrix);
+                modelMatrix.set(cubeMatrix);
+                globelMVPMatrix.multiply(modelMatrix);
+                gl.uniformMatrix4fv(program.u_MvpMatrix, false, globelMVPMatrix.elements);
+
+                if (id === 3) {
+                    gl.uniform4fv(program.u_HighLight, [1, 0, 0, 1]);
+                } else {
+                    gl.uniform4fv(program.u_HighLight, [1, 1, 1, 1]);
+                }
+
+                gl.drawArrays(gl.TRIANGLES, 0, cubeBufferInfo.numElements);
+            }
+
+
+
+
+        }
+        (function tick() {
+            drawScene();
+            requestAnimationFrame(tick);
+        })();
+
+        gl.canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+
+        });
+
+
+
+
+    });
+</script>
