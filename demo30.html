@@ -2,7 +2,7 @@
  * @Description: pick
  * @Author: SZEWEC
  * @Date: 2021-02-24 11:19:46
- * @LastEditTime: 2021-02-26 17:56:51
+ * @LastEditTime: 2021-02-27 23:17:05
  * @LastEditors: Sam
 -->
 <html>
@@ -80,9 +80,9 @@
 
         const pickFS = `
             precision mediump float;
-            uniform vec4 a_Color;
+            uniform vec4 u_Color;
             void main(){
-                gl_FragColor.rgba = a_Color;
+                gl_FragColor.rgba = u_Color;
             }
        `
 
@@ -97,7 +97,7 @@
         const pickProgram = createProgram(gl, pickVS, pickFS);
 
         pickProgram.a_Position = gl.getAttribLocation(pickProgram, 'a_Position');
-        pickProgram.v_Color = gl.getAttribLocation(pickProgram, 'v_Color');
+        pickProgram.u_Color = gl.getUniformLocation(pickProgram, 'u_Color');
         pickProgram.u_MvpMatrix = gl.getUniformLocation(pickProgram, 'u_MvpMatrix');
         function isPowerOf2(value) {
             return (value & (value - 1)) === 0;
