@@ -2,7 +2,7 @@
  * @Description: pick texture in frustum
  * @Author: SZEWEC
  * @Date: 2021-02-24 11:19:46
- * @LastEditTime: 2021-02-27 23:35:30
+ * @LastEditTime: 2021-02-28 18:47:49
  * @LastEditors: Sam
 -->
 <html>
@@ -85,6 +85,9 @@
                 gl_FragColor.rgba = u_Color;
             }
        `
+        function degToRad(d) {
+            return d * Math.PI / 180;
+        }
 
         //创建程序
         const program = createProgram(gl, VS, FS);
@@ -141,6 +144,7 @@
         VMatrix.setLookAt(0, 0, 300, 0.0, 0.0, 20.0, 0.0, 1.0, 0.0);
 
         const VPMatrix = PMatrix.multiply(VMatrix);
+        const FVPMatrix = new Matrix4();
 
         var angle_step = 30;
         var last = new Date();
@@ -609,6 +613,7 @@
         const drawPickTexture = () => {
 
         }
+
         const drawScene = () => {
             currentAngle = animate(currentAngle);
 
@@ -616,6 +621,29 @@
             gl.viewport(0, 0, canvas.width, canvas.height);
             gl.clearColor(1, 1, 1, 1);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            
+            const aspect = canvas.width / canvas.height;
+            const fov = degToRad(60);
+
+            //对边/棱边 = 正切
+            const top = Math.tan(fov * 0.5) *  1.0;
+            const bottom = -top;
+
+            //left / bottom = canvas.width / canvas.height;
+            const left = bottom * aspect;
+            const right = -left;
+            const width = Math.abs(right - left);
+            const height = Math.abs(top - bottom);
+
+            const pixelX = mouseX * canvas.width / canvas.clientWidth;
+            const pixelY = canvas.height - mouseY * canvas.height / canvas.clientHeight - 1;
+            const subLeft = left + pixelX * width / canvas.width;
+            const subRight = subLeft + 1 / canvas.width;
+            const subButtom = bottom + pixelY * height / canvas.height;
+            const subTop = subButtom + 1 / canvas.height;
+
+            FVPMatrix.setFrustum(subLeft, subRight, subButtom, subTop, 1.0, 2000.0);
+            FVPMatrix.multiply(VMatrix);
 
             // //绘制纹理
             gl.useProgram(pickProgram);
@@ -626,7 +654,7 @@
                 gl.enableVertexAttribArray(pickProgram.a_Position);
 
 
-                globelMVPMatrix.set(VPMatrix);
+                globelMVPMatrix.set(FVPMatrix);
                 modelMatrix.setTranslate(...translate1);
                 modelMatrix.rotate(currentAngle, 1, 1, 1);
                 sphereMatrix.set(modelMatrix);
@@ -645,7 +673,7 @@
 
                 gl.uniform4fv(pickProgram.u_Color, id2);
 
-                globelMVPMatrix.set(VPMatrix);
+                globelMVPMatrix.set(FVPMatrix);
                 modelMatrix.setTranslate(...translate2);
                 modelMatrix.rotate(currentAngle, 1, 1, 1);
                 coneMatrix.set(modelMatrix);
@@ -662,21 +690,18 @@
 
                 gl.uniform4fv(pickProgram.u_Color, id3);
 
-                globelMVPMatrix.set(VPMatrix);
+                globelMVPMatrix.set(FVPMatrix);
                 modelMatrix.setTranslate(...translate3);
                 modelMatrix.rotate(currentAngle, 1, 1, 1);
                 cubeMatrix.set(modelMatrix);
                 globelMVPMatrix.multiply(modelMatrix);
                 gl.uniformMatrix4fv(pickProgram.u_MvpMatrix, false, globelMVPMatrix.elements);
-
                 gl.drawArrays(gl.TRIANGLES, 0, cubeBufferInfo.numElements);
             }
-            const pixelX = mouseX * gl.canvas.width / gl.canvas.clientWidth;
-            const pixelY = gl.canvas.height - mouseY * gl.canvas.height / gl.canvas.clientHeight - 1;
             const data = new Uint8Array(4);
             gl.readPixels(
-                pixelX,            // x
-                pixelY,            // y
+                0,            // x
+                0,            // y
                 1,                 // width
                 1,                 // height
                 gl.RGBA,           // format
