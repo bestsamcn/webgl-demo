@@ -2,7 +2,7 @@
  * @Description: pick texture in frustum
  * @Author: SZEWEC
  * @Date: 2021-02-24 11:19:46
- * @LastEditTime: 2021-02-28 18:47:49
+ * @LastEditTime: 2021-02-28 19:00:08
  * @LastEditors: Sam
 -->
 <html>
@@ -618,7 +618,7 @@
             currentAngle = animate(currentAngle);
 
             gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-            gl.viewport(0, 0, canvas.width, canvas.height);
+            gl.viewport(0, 0, 1, 1);
             gl.clearColor(1, 1, 1, 1);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
             
@@ -634,7 +634,6 @@
             const right = -left;
             const width = Math.abs(right - left);
             const height = Math.abs(top - bottom);
-
             const pixelX = mouseX * canvas.width / canvas.clientWidth;
             const pixelY = canvas.height - mouseY * canvas.height / canvas.clientHeight - 1;
             const subLeft = left + pixelX * width / canvas.width;
